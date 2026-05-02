@@ -1,92 +1,64 @@
-import re
-
-import gspread
-import pandas as pd
+from __future__ import annotations
 
 from config.settings import get_settings
-from db.postgres import insert_rows
+from db.postgres import ensure_table_exists, insert_rows
+from db.table_specs import META_ADS_DAILY_COLUMNS, META_ADS_DAILY_PRIMARY_KEY
+from ingestion.google_sheets import parse_sheet_source, read_sheet_as_dataframe
+from ingestion.meta_ads_transform import extract_dates, transform_meta_ads_sheet
 
 
-DATE_COLUMN_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2})_(.+)$")
+def ensure_target_table(table_name: str):
+    ensure_table_exists(
+        table_name=table_name,
+        ddl_columns=META_ADS_DAILY_COLUMNS,
+        primary_key_columns=META_ADS_DAILY_PRIMARY_KEY,
+    )
 
 
-def get_gspread_client(credentials_file: str):
-    return gspread.service_account(filename=credentials_file)
-
-
-def get_worksheet(sheet_url: str, worksheet_name: str = ""):
+def load_sheet_to_postgres(
+    sheet_url: str,
+    worksheet_name: str = "",
+    worksheet_gid: int | None = None,
+    table_name: str | None = None,
+    channel: str = "facebook",
+):
     settings = get_settings()
-    client = get_gspread_client(settings.google_credentials_file)
-    spreadsheet = client.open_by_url(sheet_url)
-    if worksheet_name:
-        return spreadsheet.worksheet(worksheet_name)
-    return spreadsheet.sheet1
+    target_table = table_name or settings.mart_table_name
+    source = parse_sheet_source(sheet_url)
+    resolved_gid = worksheet_gid if worksheet_gid is not None else source.worksheet_gid
 
+    source_df = read_sheet_as_dataframe(
+        sheet_url=sheet_url,
+        worksheet_name=worksheet_name,
+        worksheet_gid=resolved_gid,
+    )
+    mart_df = transform_meta_ads_sheet(source_df, channel=channel)
 
-def read_sheet_as_dataframe(sheet_url: str, worksheet_name: str = ""):
-    worksheet = get_worksheet(sheet_url=sheet_url, worksheet_name=worksheet_name)
-    records = worksheet.get_all_records()
-    return pd.DataFrame(records)
+    ensure_target_table(target_table)
+    inserted_count = insert_rows(mart_df, table_name=target_table)
 
-
-def clean_number(x):
-    if pd.isna(x):
-        return 0
-    x = str(x).replace(",", "").replace("%", "")
-    return float(x)
-
-
-def extract_dates(columns):
-    dates = set()
-    for column in columns:
-        match = DATE_COLUMN_PATTERN.match(str(column))
-        if match:
-            dates.add(match.group(1))
-    return sorted(dates)
-
-
-def transform(df):
-    records = []
-    dates = extract_dates(df.columns)
-
-    for _, row in df.iterrows():
-        campaign = row.get("캠페인")
-
-        if not campaign or "SUMMARY" in str(campaign) or campaign == "총계":
-            continue
-
-        for date in dates:
-            records.append(
-                {
-                    "date": date,
-                    "channel": "facebook",
-                    "product": row.get("상품명"),
-                    "campaign": campaign,
-                    "spend": clean_number(row.get(f"{date}_지출금액")),
-                    "revenue": clean_number(row.get(f"{date}_매출액")),
-                    "roas": clean_number(row.get(f"{date}_ROAS")),
-                }
-            )
-
-    return pd.DataFrame(records)
-
-
-def load_sheet_to_postgres(sheet_url: str, worksheet_name: str = ""):
-    df = read_sheet_as_dataframe(sheet_url=sheet_url, worksheet_name=worksheet_name)
-    mart_df = transform(df)
-    inserted_count = insert_rows(mart_df)
     return {
-        "source_rows": len(df),
+        "sheet_url": sheet_url,
+        "worksheet_name": worksheet_name,
+        "worksheet_gid": resolved_gid,
+        "table_name": target_table,
+        "source_rows": len(source_df),
         "mart_rows": len(mart_df),
         "inserted_rows": inserted_count,
+        "detected_dates": extract_dates(source_df.columns),
     }
 
 
 def run():
     settings = get_settings()
+    source = parse_sheet_source(settings.google_sheet_url)
+    resolved_gid = settings.google_worksheet_gid or source.worksheet_gid
     return load_sheet_to_postgres(
         sheet_url=settings.google_sheet_url,
         worksheet_name=settings.google_worksheet_name,
+        worksheet_gid=resolved_gid,
+        table_name=settings.mart_table_name,
+        channel="facebook",
     )
 
 

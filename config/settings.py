@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 import os
 
@@ -16,6 +18,7 @@ class Settings:
     google_credentials_file: str
     google_sheet_url: str
     google_worksheet_name: str
+    google_worksheet_gid: int | None
     mart_table_name: str
 
 
@@ -31,8 +34,9 @@ def get_settings() -> Settings:
         google_credentials_file=os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json"),
         google_sheet_url=os.getenv(
             "GOOGLE_SHEET_URL",
-            "https://docs.google.com/spreadsheets/d/1a1kgbwfJs1N_fwvxBcojHnKykvfBfeiRM7VJz4z00K0/edit?usp=sharing",
+            "https://docs.google.com/spreadsheets/d/1a1kgbwfJs1N_fwvxBcojHnKykvfBfeiRM7VJz4z00K0/edit?gid=1134925394#gid=1134925394",
         ),
         google_worksheet_name=os.getenv("GOOGLE_WORKSHEET_NAME", ""),
-        mart_table_name=os.getenv("MART_TABLE_NAME", "mart_ads_daily"),
+        google_worksheet_gid=int(os.getenv("GOOGLE_WORKSHEET_GID")) if os.getenv("GOOGLE_WORKSHEET_GID") else None,
+        mart_table_name=os.getenv("MART_TABLE_NAME", "public.meta_ads_daily"),
     )
