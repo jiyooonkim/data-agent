@@ -2,3 +2,4 @@ pandas
 gspread
 psycopg2-binary
 requests
+python-dotenv

@@ -1,8 +1,20 @@
-요구사항
-데이터 내부에만 존재해야함, 회사 보안 때문
-맥미니, 로컬 맥북에 환경세팅하고 올릴 예정
-전사 googlesheet 데이터 기반 사용중
-웹크롤링 데이터는 gcs, bigquery 에 적재중
-요 데이터기반 슬랙 또는 팀즈 대화형 챗봇 만들예정 
+Google Sheet 기반 광고 데이터를
+자연어 질의 → SQL → 결과 응답 형태로 제공
 
-poc 단계라 비용 안들어가는 방식 
+대상: 마케팅/운영 30명
+
+
+전체 아키텍처
+Google Sheet
+    ↓
+Python ingestion (cron or Airflow)
+    ↓
+Postgres (mart_ads_daily)
+    ↓
+LLM (Groq 무료)
+    ↓
+SQL 생성
+    ↓
+DB 실행
+    ↓
+Slack or CLI 응답
