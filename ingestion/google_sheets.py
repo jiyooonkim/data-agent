@@ -4,6 +4,7 @@ from __future__ import annotations
 Usage
 -----
 구글 시트를 DataFrame으로 읽을 때는 `read_sheet_as_dataframe()`를 사용합니다.
+이 프로젝트는 Python 3.12 기준으로 실행합니다.
 
 기본 사용:
 
@@ -22,6 +23,16 @@ gid를 명시해서 특정 워크시트 읽기:
         worksheet_gid=0,
     )
 
+범위를 지정해서 표 단위로 읽기:
+
+    from ingestion.google_sheets import read_sheet_range_as_dataframe
+
+    df = read_sheet_range_as_dataframe(
+        sheet_url="https://docs.google.com/spreadsheets/d/1nr9X5IgwNPG-jn0xM-P5X7dH91B-rptcYiG4xJ5AsaE/edit?pli=1&gid=0#gid=0",
+        worksheet_gid=0,
+        cell_range="D5:M32",
+    )
+
 예시:
 
     from ingestion.google_sheets import parse_sheet_source, read_sheet_as_dataframe
@@ -35,8 +46,11 @@ gid를 명시해서 특정 워크시트 읽기:
 공개 시트면 CSV export로 읽고, 비공개 시트면 `credentials.json`을 사용한 gspread로 fallback 합니다.
 """
 
+import csv
 from dataclasses import dataclass
-from io import StringIO
+from io import BytesIO, StringIO
+from pathlib import Path
+import re
 from urllib.parse import parse_qs, urlparse
 
 import gspread
@@ -48,6 +62,7 @@ from config.settings import get_settings
 
 EMPTY_HEADER_PREFIX = "unnamed"
 HTML_MARKER = "<!DOCTYPE html>"
+CELL_RANGE_PATTERN = re.compile(r"^([A-Z]+)(\d+):([A-Z]+)(\d+)$")
 
 
 @dataclass(frozen=True)
@@ -62,14 +77,20 @@ def parse_sheet_source(sheet_url: str) -> SheetSource:
     fragment_query = parse_qs(parsed.fragment)
     gid_value = query.get("gid", [None])[0] or fragment_query.get("gid", [None])[0]
     gid = int(str(gid_value)) if gid_value and str(gid_value).isdigit() else None
+    spreadsheet_path = parsed.path.split("/edit", 1)[0]
     return SheetSource(
-        spreadsheet_url=f"{parsed.scheme}://{parsed.netloc}{parsed.path}",
+        spreadsheet_url=f"{parsed.scheme}://{parsed.netloc}{spreadsheet_path}",
         worksheet_gid=gid,
     )
 
 
 def get_gspread_client():
     settings = get_settings()
+    credentials_path = Path(settings.google_credentials_file)
+    if not credentials_path.exists():
+        raise FileNotFoundError(
+            f"Google service account credentials not found: {settings.google_credentials_file}"
+        )
     return gspread.service_account(filename=settings.google_credentials_file)
 
 
@@ -77,7 +98,15 @@ def fetch_public_csv(sheet_url: str, worksheet_gid: int) -> pd.DataFrame | None:
     response = requests.get(f"{sheet_url}/export?format=csv&gid={worksheet_gid}", timeout=30)
     if response.status_code != 200 or HTML_MARKER in response.text:
         return None
-    return pd.read_csv(StringIO(response.text))
+    return pd.read_csv(BytesIO(response.content), encoding="utf-8-sig")
+
+
+def fetch_public_csv_values(sheet_url: str, worksheet_gid: int) -> list[list[str]] | None:
+    response = requests.get(f"{sheet_url}/export?format=csv&gid={worksheet_gid}", timeout=30)
+    if response.status_code != 200 or HTML_MARKER in response.text:
+        return None
+    decoded_text = response.content.decode("utf-8-sig")
+    return [row for row in csv.reader(StringIO(decoded_text))]
 
 
 def get_worksheet(sheet_url: str, worksheet_name: str = "", worksheet_gid: int | None = None):
@@ -100,6 +129,47 @@ def build_dataframe_from_values(values: list[list[str]]) -> pd.DataFrame:
     return pd.DataFrame(body, columns=header)
 
 
+def build_dataframe_from_range(values: list[list[str]], header_row_index: int = 0) -> pd.DataFrame:
+    rows = [[str(cell).strip() for cell in row] for row in values]
+    rows = [row for row in rows if any(cell for cell in row)]
+    if not rows:
+        return pd.DataFrame()
+
+    if header_row_index >= len(rows):
+        raise ValueError("header_row_index is out of range for the selected cells.")
+
+    header_row = rows[header_row_index]
+    header = [column or f"{EMPTY_HEADER_PREFIX}_{index}" for index, column in enumerate(header_row, start=1)]
+    body_rows = rows[header_row_index + 1 :]
+    body = [(row + [""] * len(header))[: len(header)] for row in body_rows]
+    return pd.DataFrame(body, columns=header)
+
+
+def column_letter_to_index(column_letters: str) -> int:
+    index = 0
+    for char in column_letters:
+        index = index * 26 + (ord(char.upper()) - ord("A") + 1)
+    return index - 1
+
+
+def slice_values_by_range(values: list[list[str]], cell_range: str) -> list[list[str]]:
+    match = CELL_RANGE_PATTERN.match(cell_range.upper())
+    if not match:
+        raise ValueError(f"Unsupported cell range format: {cell_range}")
+
+    start_col, start_row, end_col, end_row = match.groups()
+    start_col_index = column_letter_to_index(start_col)
+    end_col_index = column_letter_to_index(end_col)
+    start_row_index = int(start_row) - 1
+    end_row_index = int(end_row) - 1
+
+    sliced_rows = values[start_row_index : end_row_index + 1]
+    return [
+        (row + [""] * (end_col_index + 1))[start_col_index : end_col_index + 1]
+        for row in sliced_rows
+    ]
+
+
 def read_sheet_as_dataframe(sheet_url: str, worksheet_name: str = "", worksheet_gid: int | None = None):
     source = parse_sheet_source(sheet_url)
     resolved_gid = worksheet_gid if worksheet_gid is not None else source.worksheet_gid
@@ -115,3 +185,32 @@ def read_sheet_as_dataframe(sheet_url: str, worksheet_name: str = "", worksheet_
         worksheet_gid=resolved_gid,
     )
     return build_dataframe_from_values(worksheet.get_all_values())
+
+
+def read_sheet_range_as_dataframe(
+    sheet_url: str,
+    cell_range: str,
+    worksheet_name: str = "",
+    worksheet_gid: int | None = None,
+    header_row_index: int = 0,
+):
+    source = parse_sheet_source(sheet_url)
+    resolved_gid = worksheet_gid if worksheet_gid is not None else source.worksheet_gid
+
+    if resolved_gid is not None:
+        public_values = fetch_public_csv_values(source.spreadsheet_url, resolved_gid)
+        if public_values is not None:
+            return build_dataframe_from_range(
+                slice_values_by_range(public_values, cell_range),
+                header_row_index=header_row_index,
+            )
+
+    worksheet = get_worksheet(
+        sheet_url=source.spreadsheet_url,
+        worksheet_name=worksheet_name,
+        worksheet_gid=resolved_gid,
+    )
+    return build_dataframe_from_range(
+        worksheet.get(cell_range),
+        header_row_index=header_row_index,
+    )
