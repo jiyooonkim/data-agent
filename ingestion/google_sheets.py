@@ -1,5 +1,40 @@
 from __future__ import annotations
 
+"""
+Usage
+-----
+구글 시트를 DataFrame으로 읽을 때는 `read_sheet_as_dataframe()`를 사용합니다.
+
+기본 사용:
+
+    from ingestion.google_sheets import read_sheet_as_dataframe
+
+    df = read_sheet_as_dataframe(
+        "https://docs.google.com/spreadsheets/d/1nr9X5IgwNPG-jn0xM-P5X7dH91B-rptcYiG4xJ5AsaE/edit?usp=sharing"
+    )
+
+gid를 명시해서 특정 워크시트 읽기:
+
+    from ingestion.google_sheets import read_sheet_as_dataframe
+
+    df = read_sheet_as_dataframe(
+        sheet_url="https://docs.google.com/spreadsheets/d/1nr9X5IgwNPG-jn0xM-P5X7dH91B-rptcYiG4xJ5AsaE/edit?usp=sharing",
+        worksheet_gid=0,
+    )
+
+예시:
+
+    from ingestion.google_sheets import parse_sheet_source, read_sheet_as_dataframe
+
+    sheet_url = "https://docs.google.com/spreadsheets/d/1nr9X5IgwNPG-jn0xM-P5X7dH91B-rptcYiG4xJ5AsaE/edit?usp=sharing"
+    source = parse_sheet_source(sheet_url)
+    df = read_sheet_as_dataframe(sheet_url=sheet_url, worksheet_gid=source.worksheet_gid)
+
+    print(df.head())
+
+공개 시트면 CSV export로 읽고, 비공개 시트면 `credentials.json`을 사용한 gspread로 fallback 합니다.
+"""
+
 from dataclasses import dataclass
 from io import StringIO
 from urllib.parse import parse_qs, urlparse
