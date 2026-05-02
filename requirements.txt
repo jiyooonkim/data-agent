@@ -1,5 +1,5 @@
-pandas
 gspread
+pandas
 psycopg2-binary
-requests
 python-dotenv
+requests
