@@ -49,6 +49,8 @@ services:
       - .env
     environment: &airflow-common-env
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:-data-agent-airflow-jwt-secret-key-please-change-this-64-bytes-minimum}
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
@@ -58,6 +60,7 @@ services:
       AIRFLOW_UID: 50000
       PYTHONPATH: /opt/airflow/project
       DATABASE_URL: postgresql://data_agent:data_agent@postgres:5432/postgres
+      DATABASE_ADMIN_URL: postgresql://postgres:postgres@postgres:5432/postgres
       GOOGLE_CREDENTIALS_FILE: /opt/airflow/project/credentials.json
     volumes:
       - ./dags:/opt/airflow/dags
