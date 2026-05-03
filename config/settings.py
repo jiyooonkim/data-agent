@@ -13,6 +13,9 @@ load_dotenv()
 class Settings:
     database_url: str
     database_admin_url: str | None
+    slack_bot_token: str | None
+    slack_app_token: str | None
+    slack_max_reply_chars: int
     groq_api_key: str | None
     groq_model: str
     groq_base_url: str
@@ -34,6 +37,9 @@ def get_settings() -> Settings:
             "postgresql://data_agent:data_agent@localhost:5432/postgres",
         ),
         database_admin_url=os.getenv("DATABASE_ADMIN_URL"),
+        slack_bot_token=os.getenv("SLACK_BOT_TOKEN"),
+        slack_app_token=os.getenv("SLACK_APP_TOKEN"),
+        slack_max_reply_chars=int(os.getenv("SLACK_MAX_REPLY_CHARS", "3000")),
         groq_api_key=os.getenv("GROQ_API_KEY"),
         groq_model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
         groq_base_url=os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
