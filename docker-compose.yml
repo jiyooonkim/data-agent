@@ -19,26 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile.app
-    container_name: data-agent-app
-    depends_on:
-      postgres:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://data_agent:data_agent@postgres:5432/postgres
-      DATABASE_ADMIN_URL: postgresql://postgres:postgres@postgres:5432/postgres
-      GOOGLE_CREDENTIALS_FILE: /app/credentials.json
-      PYTHONPATH: /app
-    volumes:
-      - ./:/app
-    profiles:
-      - app
-
   airflow-postgres:
     image: postgres:16
     container_name: data-agent-airflow-postgres
