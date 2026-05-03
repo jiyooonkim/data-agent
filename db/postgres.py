@@ -43,6 +43,16 @@ def run_query(sql_text: str, params: Iterable | None = None):
             return cur.fetchall()
 
 
+def run_query_with_columns(sql_text: str, params: Iterable | None = None):
+    logger.info("Running query with column metadata.")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql_text, params or ())
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description] if cur.description else []
+            return columns, rows
+
+
 def execute(sql_text: str, params: Iterable | None = None):
     logger.info("Executing SQL statement.")
     with get_connection() as conn:
