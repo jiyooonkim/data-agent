@@ -6,12 +6,17 @@ import os
 from dotenv import load_dotenv
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 @dataclass(frozen=True)
 class Settings:
     database_url: str
+    database_admin_url: str | None
+    groq_api_key: str | None
+    groq_model: str
+    groq_base_url: str
+    qa_default_limit: int
     openai_api_key: str | None
     openai_model: str
     openai_base_url: str | None
@@ -28,6 +33,11 @@ def get_settings() -> Settings:
             "DATABASE_URL",
             "postgresql://data_agent:data_agent@localhost:5432/postgres",
         ),
+        database_admin_url=os.getenv("DATABASE_ADMIN_URL"),
+        groq_api_key=os.getenv("GROQ_API_KEY"),
+        groq_model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
+        groq_base_url=os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+        qa_default_limit=int(os.getenv("QA_DEFAULT_LIMIT", "200")),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         openai_base_url=os.getenv("OPENAI_BASE_URL"),

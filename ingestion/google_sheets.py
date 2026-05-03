@@ -63,6 +63,7 @@ from config.settings import get_settings
 EMPTY_HEADER_PREFIX = "unnamed"
 HTML_MARKER = "<!DOCTYPE html>"
 CELL_RANGE_PATTERN = re.compile(r"^([A-Z]+)(\d+):([A-Z]+)(\d+)$")
+DATE_TEXT_PATTERN = re.compile(r"^\d{4}\.\s*\d{1,2}\.\s*\d{1,2}$")
 
 
 @dataclass(frozen=True)
@@ -145,6 +146,69 @@ def build_dataframe_from_range(values: list[list[str]], header_row_index: int = 
     return pd.DataFrame(body, columns=header)
 
 
+def normalize_date_header(value: str) -> str:
+    if not DATE_TEXT_PATTERN.match(value.strip()):
+        return value.strip()
+
+    parts = [part.strip() for part in value.split(".") if part.strip()]
+    if len(parts) != 3:
+        return value.strip()
+
+    year, month, day = parts
+    return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+
+
+def build_dataframe_from_multirow_range(values: list[list[str]], header_row_indices: list[int]) -> pd.DataFrame:
+    rows = [[str(cell).strip() for cell in row] for row in values]
+    rows = [row for row in rows if any(cell for cell in row)]
+    if not rows:
+        return pd.DataFrame()
+
+    if not header_row_indices:
+        raise ValueError("header_row_indices must not be empty.")
+    if max(header_row_indices) >= len(rows):
+        raise ValueError("header_row_indices is out of range for the selected cells.")
+
+    width = max(len(row) for row in rows)
+    normalized_rows = [(row + [""] * width)[:width] for row in rows]
+    header_rows = [normalized_rows[index] for index in header_row_indices]
+
+    # Forward-fill the first header row so date groups span metric columns.
+    first_header = header_rows[0][:]
+    current_value = ""
+    for index, value in enumerate(first_header):
+        if value:
+            current_value = normalize_date_header(value)
+        elif current_value:
+            first_header[index] = current_value
+
+    combined_header = []
+    for column_index in range(width):
+        parts = []
+        for header_row_index, header_row in enumerate(header_rows):
+            value = header_row[column_index].strip()
+            if header_row_index == 0 and not value:
+                value = first_header[column_index].strip()
+            value = normalize_date_header(value)
+            if value:
+                parts.append(value)
+
+        if not parts:
+            combined_header.append(f"{EMPTY_HEADER_PREFIX}_{column_index + 1}")
+            continue
+
+        if len(parts) >= 2 and DATE_TEXT_PATTERN.match(parts[0].replace("-", ". ").replace("-", ". ")):
+            combined_header.append(f"{parts[0]}_{parts[-1]}")
+        elif len(parts) >= 2 and re.match(r"^\d{4}-\d{2}-\d{2}$", parts[0]):
+            combined_header.append(f"{parts[0]}_{parts[-1]}")
+        else:
+            combined_header.append(parts[-1] if len(set(parts)) == 1 else "_".join(parts))
+
+    body_start = max(header_row_indices) + 1
+    body_rows = normalized_rows[body_start:]
+    return pd.DataFrame(body_rows, columns=combined_header)
+
+
 def column_letter_to_index(column_letters: str) -> int:
     index = 0
     for char in column_letters:
@@ -193,6 +257,7 @@ def read_sheet_range_as_dataframe(
     worksheet_name: str = "",
     worksheet_gid: int | None = None,
     header_row_index: int = 0,
+    header_row_indices: list[int] | None = None,
 ):
     source = parse_sheet_source(sheet_url)
     resolved_gid = worksheet_gid if worksheet_gid is not None else source.worksheet_gid
@@ -200,8 +265,14 @@ def read_sheet_range_as_dataframe(
     if resolved_gid is not None:
         public_values = fetch_public_csv_values(source.spreadsheet_url, resolved_gid)
         if public_values is not None:
+            sliced_values = slice_values_by_range(public_values, cell_range)
+            if header_row_indices is not None:
+                return build_dataframe_from_multirow_range(
+                    sliced_values,
+                    header_row_indices=header_row_indices,
+                )
             return build_dataframe_from_range(
-                slice_values_by_range(public_values, cell_range),
+                sliced_values,
                 header_row_index=header_row_index,
             )
 
@@ -210,7 +281,10 @@ def read_sheet_range_as_dataframe(
         worksheet_name=worksheet_name,
         worksheet_gid=resolved_gid,
     )
-    return build_dataframe_from_range(
-        worksheet.get(cell_range),
-        header_row_index=header_row_index,
-    )
+    range_values = worksheet.get(cell_range)
+    if header_row_indices is not None:
+        return build_dataframe_from_multirow_range(
+            range_values,
+            header_row_indices=header_row_indices,
+        )
+    return build_dataframe_from_range(range_values, header_row_index=header_row_index)
