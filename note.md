@@ -17,4 +17,4 @@ SQL 생성
     ↓
 DB 실행
     ↓
-Slack or CLI 응답
+Slack or CLI 응답 
