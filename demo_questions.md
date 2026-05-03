@@ -1,6 +1,6 @@
 # Demo Questions
 
-`dw.meta_ads_daily` 에 넣은 가짜 데이터 기준 예시 질문입니다.
+`dw.meta_ads_daily` 에 넣은 데이터 기준 예시 질문입니다.
 
 ## 채널 집계
 
