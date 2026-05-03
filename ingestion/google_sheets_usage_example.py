@@ -15,13 +15,13 @@ TABLE_SPECS = [
         "table_name": "facebook",
         "channel": "facebook",
         "cell_range": "D5:M32",
-        "header_row_index": 1,
+        "header_row_indices": [0, 1],
     },
     {
         "table_name": "google",
         "channel": "google",
         "cell_range": "O4:X25",
-        "header_row_index": 2,
+        "header_row_indices": [1, 2],
     },
 ]
 
@@ -64,6 +64,7 @@ DW_TABLE_CONFLICT_COLUMNS = [
     "event_date",
     "product_name",
     "campaign_name",
+    "campaign_mapping",
 ]
 
 DW_TABLE_UPDATE_COLUMNS = [
@@ -121,7 +122,7 @@ def read_usage_sheet_data(
             sheet_url=resolved_sheet_url,
             worksheet_gid=resolved_gid,
             cell_range=spec["cell_range"],
-            header_row_index=spec["header_row_index"],
+            header_row_indices=spec["header_row_indices"],
         )
 
         raw_records.append(
@@ -133,7 +134,7 @@ def read_usage_sheet_data(
                 table_name=spec["table_name"],
                 cell_range=spec["cell_range"],
                 channel=spec["channel"],
-                header_row_index=spec["header_row_index"],
+                header_row_index=spec["header_row_indices"][-1],
             )
         )
         dw_frames.append(
@@ -151,7 +152,7 @@ def read_usage_sheet_data(
                 "table_name": spec["table_name"],
                 "channel": spec["channel"],
                 "cell_range": spec["cell_range"],
-                "header_row_index": spec["header_row_index"],
+                "header_row_index": spec["header_row_indices"][-1],
                 "source_rows": len(table_df),
             }
         )
