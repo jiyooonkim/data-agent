@@ -139,12 +139,12 @@ cp .env.example .env
 ./scripts/start_local_services.sh
 ```
 
-This script does the following:
+This script simply:
 
-- starts Docker Desktop if needed
-- starts `docker compose` services
+- checks Docker Desktop
+- runs `docker compose up -d`
 - starts `Ollama` if needed
-- pulls the default SQL model if missing
+- pulls `qwen3:8b` if missing
 
 ### 3. Run ingestion DAG
 
