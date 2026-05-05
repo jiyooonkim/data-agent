@@ -10,7 +10,7 @@ A data pipeline and conversational analytics system that ingests Google Sheets-b
 * Source: Google Sheets (manual ad data input)
 * Processing: Python + Apache Airflow 3.2.0
 * Storage: PostgreSQL (raw + DW layers)
-* Query Engine: LLM (Groq, OpenAI-compatible)
+* Query Engine: LLM (Ollama local model)
 * Interface: Slack bot / CLI
 
 ```text
@@ -57,7 +57,7 @@ Slack / CLI response
 ### Query System
 
 * Input: natural language question
-* LLM generates SQL (Groq)
+* LLM generates SQL (Ollama)
 * SQL validation layer:
 
   * only `SELECT`
@@ -136,8 +136,15 @@ cp .env.example .env
 ### 2. Run infrastructure
 
 ```bash
-docker compose up -d --build
+./scripts/start_local_services.sh
 ```
+
+This script does the following:
+
+- starts Docker Desktop if needed
+- starts `docker compose` services
+- starts `Ollama` if needed
+- pulls the default SQL model if missing
 
 ### 3. Run ingestion DAG
 
@@ -159,7 +166,7 @@ docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
 * `ingestion/` – Google Sheets → Postgres pipeline
 * `db/` – database connection layer
 * `service/qa_service.py` – NL → SQL → execution
-* `llm/` – prompt + LLM client (Groq)
+* `llm/` – prompt + LLM client (Ollama default)
 * `slack_app.py` – Slack interface
 * `dags/` – Airflow DAGs
 
@@ -171,7 +178,7 @@ docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
 * RAG pipeline for docs / policies / meeting notes
 * Multi-model architecture:
 
-  * SQL queries → Groq
+  * SQL queries → Ollama
   * Document QA → Gemini
 * Vector DB integration (likely `pgvector`)
 
@@ -186,4 +193,31 @@ This project focuses on building a **structured data chatbot**:
 * Production-ready ingestion pipeline
 
 Next step: evolve into a **hybrid system (SQL + RAG)**.
+
+---
+
+## Ollama Setup
+
+The current default SQL model path is:
+
+- Runtime: `Ollama`
+- Model: `qwen3:8b`
+
+Required environment variables:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_SQL_MODEL=qwen3:8b
+```
+
+Local setup:
+
+```bash
+./scripts/start_local_services.sh
+```
+
+Fallback:
+
+- if `qwen3:8b` is too slow on the local machine, use `qwen3:4b`
  

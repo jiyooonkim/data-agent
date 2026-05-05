@@ -1,8 +1,8 @@
-# Google Sheet -> PostgreSQL 개발 순서
+### 다음 순서를 참고하여 프로젝트를 수행해 보세요!!
 
 30명 안팎이 사용하는 사내 챗봇을 기준으로 하면, 처음부터 거대한 플랫폼으로 갈 필요는 없습니다. 대신 "반복 적재", "오류 추적", "같은 데이터를 여러 번 넣어도 안전함" 이 세 가지를 먼저 확보하는걸 우선으로 하였습니다.
 
-## 1. 1차 목표 먼저 고정
+## 1. 1차 목표 
 
 첫 단계 목표:
 
@@ -23,20 +23,15 @@
 
 여기서 규칙이 흔들리면 이후 챗봇 정확도가 계속 흔들립니다. 가장 먼저 해야 하는 일은 "시트 포맷 계약"을 문서화하는 것입니다.
 
-## 3. 적재 구조는 raw -> mart 2단계로 가는 게 좋음
-
-지금 코드처럼 곧바로 mart에 넣는 방식으로 시작은 가능하지만, 운영이 붙으면 raw 적재 테이블을 하나 두는 편이 낫습니다.
-
-추천 순서:
+## 3. 적재 구조는 raw -> mart
 
 1. `raw_google_sheet_rows`
 2. `mart_ads_daily`
 
 이유:
-
 - 시트 원본이 바뀌었을 때 역추적이 쉽습니다.
 - 변환 로직 버그가 나도 raw 기준으로 다시 적재할 수 있습니다.
-- 담당자 30명 수준이면 "누가 어떤 값을 바꿨는지" 추적 요구가 금방 생깁니다.
+- 담당자 100명 수준이면 "누가 어떤 값을 바꿨는지" 추적 요구가 금방 생깁니다.
 
 ## 4. 배치 실행 방식
 - 일배치 또는 1시간 1회 배치
@@ -83,14 +78,27 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-DB를 Docker로 올릴 경우 먼저 아래를 실행 
+항상 떠 있어야 하는 서비스는 아래 스크립트 하나로 올릴 수 있습니다.
+
+```bash
+./scripts/start_local_services.sh
+```
+
+이 스크립트가 하는 일:
+
+- Docker Desktop 실행 확인
+- `docker compose up -d`
+- Ollama 서버 실행 확인
+- 기본 모델 `qwen3:8b` 다운로드 확인
+
+수동으로 나눠서 올릴 경우 먼저 아래를 실행 
 
 ```bash
 docker compose up -d
 cp .env.example .env
 ```
 
-이 구성을 쓰면 아래 계정이 자동 생성 됩니다. 
+이 구성을 쓰면 아래 계정이 자동 생성 
 
 - host: `localhost`
 - port: `5432`
@@ -134,7 +142,7 @@ print(result)
 
 ## 9. Airflow 3.2.0 파이프라인
 
-이 저장소에는 Airflow `3.2.0` 기준 Docker 구성이 포함되어 있습니다.
+이 저장소에는 Apache Airflow `3.2.0` 기준 Docker 구성이 포함되어 있습니다.
 
 구성 파일:
 
@@ -166,11 +174,144 @@ docker compose up -d --build
 
 DAG:
 
-- `google_sheet_to_dw`
+- `sheet_to_postgres`
 
 작업 단계:
 
 1. 소스 시트 접근 확인
-2. 시트 데이터를 mart 형태로 변환
-3. `public.mart_ads_daily` 로 upsert
+2. 시트 데이터를 DW 형태로 변환
+3. `dw.meta_ads_daily` 로 upsert
 4. 적재 후 DW row count 검증
+
+## 10. 자연어 질의 모델 실행 방식
+
+현재 프로젝트의 자연어 질의 기본 경로는 `Groq`가 아니라 `Ollama` 입니다.
+
+- provider: `Ollama`
+- model: `qwen3:8b`
+- 목적: 정형 데이터 질의를 SQL로 변환
+
+현재 흐름:
+
+```text
+사용자 질문
+-> Ollama(qwen3:8b)
+-> SQL 생성
+-> PostgreSQL 조회
+-> Slack / CLI 응답
+```
+
+## 11. Ollama + QA 실행 순서
+### 11.1 최초 1회만 필요한 작업
+
+Ollama 모델 다운로드:
+
+```bash
+./scripts/start_local_services.sh
+```
+
+이 스크립트가 최초 1회에는 모델 다운로드까지 같이 처리합니다.
+
+### 11.2 Ollama 서버 실행
+
+Ollama 서버가 꺼져 있을 때만 실행:
+
+```bash
+./scripts/start_local_services.sh
+```
+
+서버가 이미 떠 있으면 다시 실행해도 문제 없습니다.
+
+### 11.3 상태 확인
+
+모델이 받아져 있는지 확인:
+
+```bash
+ollama list
+```
+
+서버가 살아있는지 확인:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+즉 지금은 `11.1`, `11.2`를 따로 하기보다 `start_local_services.sh` 한 번 실행하고 `11.3`으로 확인하는 방식이 가장 단순합니다.
+
+### 11.4 CLI 질의 실행
+
+평소 반복해서 실행하는 질의:
+
+```bash
+./.venv/bin/python main.py ask --question "최근 7일 채널별 매출 합계 보여줘"
+```
+
+정리:
+
+- `ollama pull qwen3:8b` 는 최초 1회
+- `ollama serve` 는 서버가 꺼져 있을 때만
+- `ollama list`, `curl /api/tags` 는 확인용
+- 실제 질의는 `main.py ask` 만 반복 실행
+
+## 12. Slack 실행 순서
+
+Slack은 CLI 질의가 먼저 정상 동작한 뒤 실행하는 것이 맞습니다.
+
+권장 순서:
+
+1. `./scripts/start_local_services.sh`
+2. `main.py ask` 로 CLI 질의 성공 확인
+3. `slack_app.py` 실행
+4. Slack DM 또는 채널 멘션 테스트
+
+Slack 앱 실행:
+
+```bash
+./.venv/bin/python slack_app.py
+```
+
+Slack에서 사용:
+
+- DM: 멘션 없이 질문
+- 채널: `/invite @봇이름` 후 `@봇이름 질문`
+
+즉, `12번`은 `11번`이 먼저 끝난 뒤 수행하는 것이 맞습니다.
+
+## 13. 실행 순서 요약
+
+처음 세팅할 때:
+
+```bash
+./scripts/start_local_services.sh
+ollama list
+curl http://localhost:11434/api/tags
+./.venv/bin/python main.py ask --question "최근 7일 채널별 매출 합계 보여줘"
+./.venv/bin/python slack_app.py
+```
+
+이후 평소 사용:
+
+```bash
+./scripts/start_local_services.sh
+./.venv/bin/python main.py ask --question "최근 7일 채널별 매출 합계 보여줘"
+./.venv/bin/python slack_app.py
+```
+
+즉 질문한 내용 기준으로 답하면:
+
+- `12번`, `13번`은 순서가 있습니다.
+- 먼저 `11번`
+- 그 다음 `12번`
+- `13번`은 전체 요약입니다.
+
+## 14. 현재 질의 대상 테이블
+
+현재 챗봇이 직접 조회하는 테이블은 아래입니다.
+
+- `dw.meta_ads_daily`
+
+원본 블록 저장 테이블:
+
+- `raw.google_sheet_table_blocks`
+
+즉, 챗봇은 `raw`를 직접 읽지 않고 `dw`만 읽습니다.

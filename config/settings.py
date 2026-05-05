@@ -16,6 +16,9 @@ class Settings:
     slack_bot_token: str | None
     slack_app_token: str | None
     slack_max_reply_chars: int
+    llm_provider: str
+    ollama_base_url: str
+    ollama_sql_model: str
     groq_api_key: str | None
     groq_model: str
     groq_base_url: str
@@ -40,6 +43,9 @@ def get_settings() -> Settings:
         slack_bot_token=os.getenv("SLACK_BOT_TOKEN"),
         slack_app_token=os.getenv("SLACK_APP_TOKEN"),
         slack_max_reply_chars=int(os.getenv("SLACK_MAX_REPLY_CHARS", "3000")),
+        llm_provider=os.getenv("LLM_PROVIDER", "ollama"),
+        ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        ollama_sql_model=os.getenv("OLLAMA_SQL_MODEL", "qwen3:8b"),
         groq_api_key=os.getenv("GROQ_API_KEY"),
         groq_model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
         groq_base_url=os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
