@@ -4,8 +4,6 @@ import argparse
 import logging
 
 from db.seed_fake_data import seed_demo_data
-from ingestion.notion_to_vector import ingest_notion_to_vector
-from service.doc_qa_service import ask_doc
 from service.qa_service import ask
 
 
@@ -38,6 +36,8 @@ def main():
         print("RESULT:")
         print(result["answer_text"])
     elif args.command == "ask-doc":
+        from service.doc_qa_service import ask_doc
+
         result = ask_doc(args.question)
         print("ANSWER:")
         print(result["answer_text"])
@@ -48,6 +48,8 @@ def main():
     elif args.command == "seed-demo-data":
         print(seed_demo_data())
     elif args.command == "ingest-notion":
+        from ingestion.notion_to_vector import ingest_notion_to_vector
+
         print(ingest_notion_to_vector())
 
 
