@@ -6,7 +6,9 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from config.settings import get_settings
+from service.doc_qa_service import ask_doc
 from service.qa_service import ask
+from service.router_service import route_question
 
 
 logger = logging.getLogger(__name__)
@@ -20,8 +22,25 @@ def trim_reply(text: str, max_chars: int) -> str:
 
 def build_reply(question: str) -> str:
     settings = get_settings()
-    result = ask(question)
-    return trim_reply(result["answer_text"], settings.slack_max_reply_chars)
+    route = route_question(question)
+
+    if route == "structured":
+        result = ask(question)
+        return trim_reply(result["answer_text"], settings.slack_max_reply_chars)
+
+    if route == "document":
+        result = ask_doc(question)
+        return trim_reply(result["answer_text"], settings.slack_max_reply_chars)
+
+    structured_result = ask(question)
+    document_result = ask_doc(question)
+    combined = (
+        "[Structured Data]\n"
+        f"{structured_result['answer_text']}\n\n"
+        "[Document Context]\n"
+        f"{document_result['answer_text']}"
+    )
+    return trim_reply(combined, settings.slack_max_reply_chars)
 
 
 def build_app() -> App:

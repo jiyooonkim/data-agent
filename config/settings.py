@@ -19,6 +19,7 @@ class Settings:
     slack_app_token: str | None
     slack_max_reply_chars: int
     ollama_base_url: str
+    ollama_router_model: str
     ollama_sql_model: str
     ollama_doc_model: str
     ollama_embedding_model: str
@@ -48,9 +49,10 @@ def get_settings() -> Settings:
         slack_app_token=os.getenv("SLACK_APP_TOKEN"),
         slack_max_reply_chars=int(os.getenv("SLACK_MAX_REPLY_CHARS", "3000")),
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        ollama_router_model=os.getenv("OLLAMA_ROUTER_MODEL", "qwen2.5:3b"),
         ollama_sql_model=os.getenv("OLLAMA_SQL_MODEL", "qwen3:8b"),
         ollama_doc_model=os.getenv("OLLAMA_DOC_MODEL", "qwen3:8b"),
-        ollama_embedding_model=os.getenv("OLLAMA_EMBEDDING_MODEL", "embeddinggemma"),
+        ollama_embedding_model=os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:latest"),
         qa_default_limit=int(os.getenv("QA_DEFAULT_LIMIT", "200")),
         doc_answer_chunk_limit=int(os.getenv("DOC_ANSWER_CHUNK_LIMIT", "5")),
         openai_api_key=os.getenv("OPENAI_API_KEY"),

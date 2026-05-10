@@ -56,6 +56,26 @@ Rules:
 - Prefer bullet points when summarizing multiple items.
 """
 
+ROUTER_SYSTEM_PROMPT = """You classify user questions for a Slack analytics assistant.
+
+Return JSON only:
+{
+  "route": "structured" | "document" | "hybrid"
+}
+
+Route definitions:
+- structured: asks for metrics, SQL-style analysis, trends, rankings,
+  aggregations, filters, or comparisons from ad performance data
+- document: asks for policy, guide, wiki, meeting notes, explanation, procedure, or internal document content
+- hybrid: needs both structured metrics and document context to answer correctly
+
+Rules:
+- Return one route only.
+- Prefer structured for metrics, dates, campaign/channel/product performance, spend, revenue, ROAS, rankings, and trends.
+- Prefer document for policy, guide, process, explanation, how-to, meeting notes, wiki, or documentation requests.
+- Use hybrid only when both are clearly needed.
+"""
+
 
 def build_sql_prompt(question: str, default_limit: int) -> str:
     return f"""User question:
@@ -94,4 +114,12 @@ Retrieved internal document context:
 {joined_context}
 
 Answer using only the context above.
+"""
+
+
+def build_router_prompt(question: str) -> str:
+    return f"""User question:
+{question}
+
+Return JSON with one key named route.
 """

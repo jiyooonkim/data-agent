@@ -6,7 +6,15 @@ import logging
 import requests
 
 from config.settings import get_settings
-from llm.prompt import DOC_SYSTEM_PROMPT, SYSTEM_PROMPT, build_doc_answer_prompt, build_sql_prompt, build_sql_repair_prompt
+from llm.prompt import (
+    DOC_SYSTEM_PROMPT,
+    ROUTER_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+    build_doc_answer_prompt,
+    build_router_prompt,
+    build_sql_prompt,
+    build_sql_repair_prompt,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +34,14 @@ def _parse_sql_json(content: str, provider_name: str, model_name: str) -> str:
     if not sql_text:
         raise ValueError(f"{provider_name} response from {model_name} did not contain sql.")
     return sql_text
+
+
+def _parse_route_json(content: str, provider_name: str, model_name: str) -> str:
+    parsed = json.loads(content)
+    route = parsed.get("route", "").strip().lower()
+    if route not in {"structured", "document", "hybrid"}:
+        raise ValueError(f"{provider_name} response from {model_name} did not contain a valid route.")
+    return route
 
 
 def _extract_ollama_text(payload: dict) -> str:
@@ -52,6 +68,28 @@ def _call_ollama(user_prompt: str) -> str:
     content = _extract_ollama_text(payload)
     logger.info("Received SQL generation response from Ollama model %s.", settings.ollama_sql_model)
     return _parse_sql_json(content, "Ollama", settings.ollama_sql_model)
+
+
+def _call_ollama_router(user_prompt: str) -> str:
+    settings = get_settings()
+    response = requests.post(
+        f"{settings.ollama_base_url}/api/generate",
+        headers={"Content-Type": "application/json"},
+        json={
+            "model": settings.ollama_router_model,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0},
+            "prompt": f"{ROUTER_SYSTEM_PROMPT}\n\n{user_prompt}",
+        },
+        timeout=180,
+    )
+    response.raise_for_status()
+
+    payload = response.json()
+    content = _extract_ollama_text(payload)
+    logger.info("Received route classification response from Ollama model %s.", settings.ollama_router_model)
+    return _parse_route_json(content, "Ollama", settings.ollama_router_model)
 
 
 def _call_ollama_text(user_prompt: str) -> str:
@@ -148,3 +186,7 @@ def repair_sql(question: str, sql_text: str, error_text: str) -> str:
 
 def generate_doc_answer(question: str, contexts: list[str]) -> str:
     return _call_ollama_text(build_doc_answer_prompt(question, contexts))
+
+
+def classify_route(question: str) -> str:
+    return _call_ollama_router(build_router_prompt(question))
