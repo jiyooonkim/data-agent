@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Usage
 -----
@@ -45,6 +43,8 @@ gid를 명시해서 특정 워크시트 읽기:
 
 공개 시트면 CSV export로 읽고, 비공개 시트면 `credentials.json`을 사용한 gspread로 fallback 합니다.
 """
+
+from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
