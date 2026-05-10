@@ -71,7 +71,7 @@ You can do this in either place:
 - Creator dashboard -> `Content access`
 - Notion page UI -> `...` -> `Connections` -> `Add connection`
 
-### 5. Copy the page IDs you want to index
+### 5. Copy the page IDs or database IDs you want to index
 
 Example page URL:
 
@@ -79,12 +79,12 @@ Example page URL:
 https://www.notion.so/workspace/Page-Title-0123456789abcdef0123456789abcdef
 ```
 
-The page ID is the 32-character ID at the end.
+The page or database ID is the 32-character ID at the end.
 
-You can register multiple pages:
+You can register multiple targets:
 
 ```env
-NOTION_PAGE_IDS=page_id_1,page_id_2,page_id_3
+NOTION_PAGE_IDS=page_or_database_id_1,page_or_database_id_2,page_or_database_id_3
 ```
 
 ---
@@ -96,7 +96,7 @@ Add these to `.env`:
 ```env
 NOTION_ACCESS_TOKEN=secret_xxx
 NOTION_VERSION=2026-03-11
-NOTION_PAGE_IDS=page_id_1,page_id_2
+NOTION_PAGE_IDS=page_or_database_id_1,page_or_database_id_2
 OLLAMA_DOC_MODEL=qwen3:8b
 OLLAMA_EMBEDDING_MODEL=embeddinggemma
 DOC_ANSWER_CHUNK_LIMIT=5
@@ -107,6 +107,10 @@ Notes:
 - `NOTION_VERSION` should match the API version header.
 - `OLLAMA_DOC_MODEL` is used to answer document questions.
 - `OLLAMA_EMBEDDING_MODEL` is used to generate vector embeddings.
+- `NOTION_PAGE_IDS` can contain:
+  - normal page IDs
+  - database IDs
+  - data source IDs
 
 ---
 
@@ -140,7 +144,7 @@ docker compose down
 docker compose up -d --build
 ```
 
-### 3. Ingest Notion pages
+### 3. Ingest Notion pages or databases
 
 ```bash
 ./.venv/bin/python main.py ingest-notion
@@ -161,13 +165,14 @@ docker compose up -d --build
 - calls Notion API
 - fetches page metadata
 - fetches block children recursively
-- converts page content into markdown-like plain text
+- falls back to database/data source APIs when page retrieval returns 404
+- converts page content and row properties into markdown-like plain text
 
 ### `ingestion/notion_to_vector.py`
 
-- chunks page text
+- chunks page or row text
 - calls Ollama embedding API
-- stores pages and chunk embeddings in PostgreSQL
+- stores page documents and chunk embeddings in PostgreSQL
 
 ### `service/doc_qa_service.py`
 
@@ -186,7 +191,7 @@ docker compose up -d --build
 2. Copy Installation access token
 3. Enable Read content capability
 4. Share target pages with the connection
-5. Put page IDs into NOTION_PAGE_IDS
+5. Put page, database, or data source IDs into NOTION_PAGE_IDS
 
 ### Local setup
 

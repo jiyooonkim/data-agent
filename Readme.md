@@ -5,6 +5,60 @@ A data pipeline and conversational analytics system that ingests Google Sheets-b
 
 ---
 
+## Project Setup
+
+### 1. Prepare environment file
+
+```bash
+cp .env.example .env
+```
+
+### 2. Start local services
+
+```bash
+./scripts/start_local_services.sh
+```
+
+This script simply:
+
+- checks Docker Desktop
+- runs `docker compose up -d`
+- starts `Ollama` if needed
+- pulls `qwen3:8b` if missing
+
+### 3. Run ingestion DAG
+
+```bash
+docker compose exec airflow-api-server airflow dags unpause sheet_to_postgres
+docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
+```
+
+### 4. Test structured-data QA in CLI
+
+```bash
+./.venv/bin/python main.py ask --question "최근 7일 채널별 매출 합계 보여줘"
+```
+
+### 5. Run Slack app
+
+```bash
+./.venv/bin/python slack_app.py
+```
+
+---
+
+## Project Docs
+
+- [`docs/followme.md`](/Users/jykim/Documents/private/data-agent/docs/followme.md:1)
+- [`docs/ci-checks.md`](/Users/jykim/Documents/private/data-agent/docs/ci-checks.md:1)
+- [`docs/notion-vector-setup.md`](/Users/jykim/Documents/private/data-agent/docs/notion-vector-setup.md:1)
+- [`docs/notion-doc-questions.md`](/Users/jykim/Documents/private/data-agent/docs/notion-doc-questions.md:1)
+- [`docs/demo-questions.md`](/Users/jykim/Documents/private/data-agent/docs/demo-questions.md:1)
+- [`docs/readme-kor.md`](/Users/jykim/Documents/private/data-agent/docs/readme-kor.md:1)
+- [`docs/ads-data-chatbot-architecture.md`](/Users/jykim/Documents/private/data-agent/docs/ads-data-chatbot-architecture.md:1)
+
+---
+
 ## Overview
 
 * Source: Google Sheets (manual ad data input)
@@ -29,6 +83,17 @@ Slack / CLI response
 
 ---
 
+## Core Components
+
+* `ingestion/` – Google Sheets → Postgres pipeline
+* `db/` – database connection layer
+* `service/qa_service.py` – NL → SQL → execution
+* `llm/` – prompt + LLM client (Ollama default)
+* `slack_app.py` – Slack interface
+* `dags/` – Airflow DAGs
+
+---
+
 ## Goals
 
 * Ingest Google Sheets data into a structured data warehouse
@@ -45,21 +110,16 @@ Slack / CLI response
 * Extract table ranges from Google Sheets
 * Transform into structured DataFrame
 * Store raw blocks:
-
   * `raw.google_sheet_table_blocks`
 * Upsert normalized data:
-
   * `dw.meta_ads_daily`
 * Orchestrated via Airflow DAG
-
----
 
 ### Query System
 
 * Input: natural language question
 * LLM generates SQL (Ollama)
 * SQL validation layer:
-
   * only `SELECT`
   * restricted to `dw.meta_ads_daily`
   * forbidden keywords blocked
@@ -67,12 +127,9 @@ Slack / CLI response
 * Execute query in PostgreSQL
 * Return formatted result (Slack / CLI)
 
----
-
 ### Slack Integration
 
 * Supports:
-
   * DM queries
   * Channel mentions
 * Thin interface layer
@@ -83,7 +140,6 @@ Slack / CLI response
 ## Why PostgreSQL
 
 * Most queries are **structured analytics**:
-
   * aggregations (SUM, AVG)
   * filtering
   * time-based analysis
@@ -111,14 +167,11 @@ Slack / CLI response
 * optimized for SQL queries
 * directly used by chatbot
 
----
-
 ### LLM Role (Strictly Scoped)
 
 * LLM is used **only for SQL generation**
 * Not used for document QA (yet)
 * Guardrails:
-
   * table restriction
   * query validation
   * retry with repair
@@ -142,56 +195,11 @@ In short:
 
 ---
 
-## Getting Started
-
-### 1. Setup environment
-
-```bash
-cp .env.example .env
-```
-
-### 2. Run infrastructure
-
-```bash
-./scripts/start_local_services.sh
-```
-
-This script simply:
-
-- checks Docker Desktop
-- runs `docker compose up -d`
-- starts `Ollama` if needed
-- pulls `qwen3:8b` if missing
-
-### 3. Run ingestion DAG
-
-```bash
-docker compose exec airflow-api-server airflow dags unpause sheet_to_postgres
-docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
-```
-
-### 4. Run Slack app
-
-```bash
-./.venv/bin/python slack_app.py
-```
-
----
-
-## Core Components
-
-* `ingestion/` – Google Sheets → Postgres pipeline
-* `db/` – database connection layer
-* `service/qa_service.py` – NL → SQL → execution
-* `llm/` – prompt + LLM client (Ollama default)
-* `slack_app.py` – Slack interface
-* `dags/` – Airflow DAGs
-
 ## Notion + Vector Setup
 
 For semi-structured document ingestion and QA:
 
-- [`docs/NOTION_VECTOR_SETUP.md`](/Users/jykim/Documents/private/data-agent/docs/NOTION_VECTOR_SETUP.md:1)
+- [`docs/notion-vector-setup.md`](/Users/jykim/Documents/private/data-agent/docs/notion-vector-setup.md:1)
 
 ---
 
@@ -229,7 +237,6 @@ The current default SQL model path is:
 Required environment variables:
 
 ```env
-LLM_PROVIDER=ollama
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_SQL_MODEL=qwen3:8b
 ```

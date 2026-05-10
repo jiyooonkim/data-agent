@@ -7,7 +7,7 @@ from psycopg2.extras import execute_values
 
 from config.settings import get_settings
 from db.postgres import execute_sql_file, get_connection
-from ingestion.notion_client import NotionPageDocument, fetch_notion_page_document
+from ingestion.notion_client import NotionPageDocument, fetch_notion_documents
 from llm.llm_client import embed_texts
 
 
@@ -132,21 +132,30 @@ def replace_document_chunks(page_id: str, chunks: list[str], embeddings: list[li
     return len(chunks)
 
 
-def ingest_notion_page(page_id: str) -> dict:
-    document = fetch_notion_page_document(page_id)
-    chunks = chunk_text(document.markdown_content)
-    embeddings = embed_texts(chunks) if chunks else []
+def ingest_notion_target(target_id: str) -> dict:
+    documents = fetch_notion_documents(target_id)
+    document_summaries = []
 
-    upsert_notion_page(document)
-    chunk_count = replace_document_chunks(page_id, chunks, embeddings)
+    for document in documents:
+        chunks = chunk_text(document.markdown_content)
+        embeddings = embed_texts(chunks) if chunks else []
 
-    summary = {
-        "page_id": document.page_id,
-        "title": document.title,
-        "chunk_count": chunk_count,
+        upsert_notion_page(document)
+        chunk_count = replace_document_chunks(document.page_id, chunks, embeddings)
+
+        summary = {
+            "page_id": document.page_id,
+            "title": document.title,
+            "chunk_count": chunk_count,
+        }
+        logger.info("Indexed Notion document: %s", summary)
+        document_summaries.append(summary)
+
+    return {
+        "target_id": target_id,
+        "document_count": len(document_summaries),
+        "documents": document_summaries,
     }
-    logger.info("Indexed Notion page: %s", summary)
-    return summary
 
 
 def ingest_notion_to_vector() -> dict:
@@ -156,10 +165,10 @@ def ingest_notion_to_vector() -> dict:
 
     execute_sql_file(str(DDL_SQL_PATH))
 
-    page_summaries = [ingest_notion_page(page_id) for page_id in settings.notion_page_ids]
+    target_summaries = [ingest_notion_target(page_id) for page_id in settings.notion_page_ids]
     return {
-        "page_count": len(page_summaries),
-        "pages": page_summaries,
+        "target_count": len(target_summaries),
+        "targets": target_summaries,
     }
 
 

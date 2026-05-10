@@ -43,6 +43,17 @@ def notion_get(path: str, params: dict | None = None) -> dict:
     return response.json()
 
 
+def notion_post(path: str, json_body: dict | None = None) -> dict:
+    response = requests.post(
+        f"https://api.notion.com/v1{path}",
+        headers=build_notion_headers(),
+        json=json_body or {},
+        timeout=60,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def extract_plain_text(rich_text_items: list[dict]) -> str:
     return "".join(item.get("plain_text", "") for item in rich_text_items)
 
@@ -55,6 +66,71 @@ def extract_page_title(page_payload: dict) -> str:
             if title:
                 return title
     return "Untitled"
+
+
+def extract_property_text(property_value: dict) -> str:
+    property_type = property_value.get("type")
+
+    if property_type == "title":
+        return extract_plain_text(property_value.get("title", []))
+    if property_type == "rich_text":
+        return extract_plain_text(property_value.get("rich_text", []))
+    if property_type == "number":
+        value = property_value.get("number")
+        return "" if value is None else str(value)
+    if property_type == "select":
+        select_value = property_value.get("select")
+        return "" if not select_value else select_value.get("name", "")
+    if property_type == "multi_select":
+        return ", ".join(item.get("name", "") for item in property_value.get("multi_select", []))
+    if property_type == "status":
+        status_value = property_value.get("status")
+        return "" if not status_value else status_value.get("name", "")
+    if property_type == "date":
+        date_value = property_value.get("date")
+        if not date_value:
+            return ""
+        start = date_value.get("start", "")
+        end = date_value.get("end", "")
+        return f"{start} ~ {end}" if end else start
+    if property_type == "checkbox":
+        return str(property_value.get("checkbox", False))
+    if property_type == "url":
+        return property_value.get("url", "") or ""
+    if property_type == "email":
+        return property_value.get("email", "") or ""
+    if property_type == "phone_number":
+        return property_value.get("phone_number", "") or ""
+    if property_type == "people":
+        return ", ".join(person.get("name", "") for person in property_value.get("people", []))
+    if property_type == "relation":
+        return ", ".join(item.get("id", "") for item in property_value.get("relation", []))
+    if property_type == "created_time":
+        return property_value.get("created_time", "") or ""
+    if property_type == "last_edited_time":
+        return property_value.get("last_edited_time", "") or ""
+    if property_type == "formula":
+        formula = property_value.get("formula", {})
+        formula_type = formula.get("type")
+        if formula_type in {"string", "number", "boolean"}:
+            value = formula.get(formula_type)
+            return "" if value is None else str(value)
+        if formula_type == "date":
+            date_value = formula.get("date")
+            return "" if not date_value else date_value.get("start", "")
+    return ""
+
+
+def build_properties_markdown(page_payload: dict) -> list[str]:
+    lines: list[str] = []
+    properties = page_payload.get("properties", {})
+
+    for property_name, property_value in properties.items():
+        value_text = extract_property_text(property_value).strip()
+        if value_text:
+            lines.append(f"- {property_name}: {value_text}")
+
+    return lines
 
 
 def list_block_children(block_id: str) -> list[dict]:
@@ -133,12 +209,23 @@ def collect_markdown_lines(blocks: list[dict], depth: int = 0) -> list[str]:
     return lines
 
 
-def fetch_notion_page_document(page_id: str) -> NotionPageDocument:
-    logger.info("Fetching Notion page: %s", page_id)
-    page_payload = notion_get(f"/pages/{page_id}")
-    blocks = list_block_children(page_id)
+def build_page_document(page_payload: dict, include_blocks: bool = True) -> NotionPageDocument:
+    page_id = page_payload["id"]
+    properties_lines = build_properties_markdown(page_payload)
+    blocks = list_block_children(page_id) if include_blocks else []
     markdown_lines = collect_markdown_lines(blocks)
-    markdown_content = "\n\n".join(line for line in markdown_lines if line.strip()).strip()
+    combined_lines = []
+
+    if properties_lines:
+        combined_lines.append("# Properties")
+        combined_lines.extend(properties_lines)
+
+    if markdown_lines:
+        if combined_lines:
+            combined_lines.append("")
+        combined_lines.extend(markdown_lines)
+
+    markdown_content = "\n\n".join(line for line in combined_lines if line.strip()).strip()
 
     return NotionPageDocument(
         page_id=page_id,
@@ -147,3 +234,71 @@ def fetch_notion_page_document(page_id: str) -> NotionPageDocument:
         last_edited_time=page_payload.get("last_edited_time"),
         markdown_content=markdown_content,
     )
+
+
+def fetch_notion_page_document(page_id: str) -> NotionPageDocument:
+    logger.info("Fetching Notion page: %s", page_id)
+    page_payload = notion_get(f"/pages/{page_id}")
+    return build_page_document(page_payload, include_blocks=True)
+
+
+def query_data_source_pages(data_source_id: str) -> list[dict]:
+    rows: list[dict] = []
+    next_cursor: str | None = None
+
+    while True:
+        body = {"page_size": 100}
+        if next_cursor:
+            body["start_cursor"] = next_cursor
+
+        payload = notion_post(f"/data_sources/{data_source_id}/query", body)
+        results = payload.get("results", [])
+        rows.extend(item for item in results if item.get("object") == "page")
+
+        if not payload.get("has_more"):
+            return rows
+
+        next_cursor = payload.get("next_cursor")
+
+
+def fetch_notion_database_documents(target_id: str) -> list[NotionPageDocument]:
+    logger.info("Fetching Notion database/data source: %s", target_id)
+
+    data_source_ids: list[str] = []
+
+    try:
+        database_payload = notion_get(f"/databases/{target_id}")
+        data_source_ids = [item["id"] for item in database_payload.get("data_sources", []) if item.get("id")]
+    except requests.HTTPError as exc:
+        if exc.response is None or exc.response.status_code != 404:
+            raise
+
+    if not data_source_ids:
+        data_source_payload = notion_get(f"/data_sources/{target_id}")
+        data_source_ids = [data_source_payload["id"]]
+
+    documents: list[NotionPageDocument] = []
+    for data_source_id in data_source_ids:
+        row_pages = query_data_source_pages(data_source_id)
+        for row_page in row_pages:
+            documents.append(build_page_document(row_page, include_blocks=True))
+
+    return documents
+
+
+def fetch_notion_documents(target_id: str) -> list[NotionPageDocument]:
+    try:
+        return [fetch_notion_page_document(target_id)]
+    except requests.HTTPError as exc:
+        if exc.response is None or exc.response.status_code != 404:
+            raise
+
+    try:
+        return fetch_notion_database_documents(target_id)
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            raise ValueError(
+                "Notion object was not found through page, database, or data source APIs. "
+                "Check the ID, workspace, and connection access."
+            ) from exc
+        raise

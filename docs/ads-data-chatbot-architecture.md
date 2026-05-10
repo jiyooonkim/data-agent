@@ -360,7 +360,7 @@ env DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres \
 - `facebook`: 1000 rows
 - `google`: 1000 rows
 
-예상 질문 목록은 [`demo_questions.md`](/Users/jykim/Documents/private/data-agent/docs/demo_questions.md:1) 에 정리했습니다.
+예상 질문 목록은 [`demo-questions.md`](/Users/jykim/Documents/private/data-agent/docs/demo-questions.md:1) 에 정리했습니다.
 
 ---
 
