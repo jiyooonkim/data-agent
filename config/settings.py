@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 @dataclass(frozen=True)
 class Settings:
+    project_root: Path
     database_url: str
     slack_bot_token: str | None
     slack_app_token: str | None
@@ -36,6 +39,7 @@ class Settings:
 
 def get_settings() -> Settings:
     return Settings(
+        project_root=PROJECT_ROOT,
         database_url=os.getenv(
             "DATABASE_URL",
             "postgresql://postgres:postgres@localhost:5432/postgres",

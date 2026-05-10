@@ -10,6 +10,7 @@ class SettingsTest(unittest.TestCase):
         self.assertTrue(settings.database_url)
         self.assertEqual(settings.ollama_base_url, "http://localhost:11434")
         self.assertEqual(settings.ollama_sql_model, "qwen3:8b")
+        self.assertEqual(settings.google_credentials_file, "credentials.json")
 
 
 if __name__ == "__main__":

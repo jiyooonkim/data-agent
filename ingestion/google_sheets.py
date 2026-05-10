@@ -88,11 +88,13 @@ def parse_sheet_source(sheet_url: str) -> SheetSource:
 def get_gspread_client():
     settings = get_settings()
     credentials_path = Path(settings.google_credentials_file)
+    if not credentials_path.is_absolute():
+        credentials_path = settings.project_root / credentials_path
     if not credentials_path.exists():
         raise FileNotFoundError(
             f"Google service account credentials not found: {settings.google_credentials_file}"
         )
-    return gspread.service_account(filename=settings.google_credentials_file)
+    return gspread.service_account(filename=str(credentials_path))
 
 
 def fetch_public_csv(sheet_url: str, worksheet_gid: int) -> pd.DataFrame | None:
