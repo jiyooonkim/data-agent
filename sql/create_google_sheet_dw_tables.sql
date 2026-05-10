@@ -4,6 +4,10 @@ CREATE SCHEMA IF NOT EXISTS raw;
 CREATE SCHEMA IF NOT EXISTS dw;
 CREATE SCHEMA IF NOT EXISTS docs;
 
+COMMENT ON SCHEMA raw IS 'Raw ingestion layer for source table blocks loaded from Google Sheets.';
+COMMENT ON SCHEMA dw IS 'Analytics warehouse layer for normalized advertising performance facts.';
+COMMENT ON SCHEMA docs IS 'Document retrieval layer for Notion pages, chunks, and vector embeddings.';
+
 CREATE TABLE IF NOT EXISTS raw.google_sheet_table_blocks (
     block_id bigserial PRIMARY KEY,
     spreadsheet_id text NOT NULL,
@@ -17,6 +21,19 @@ CREATE TABLE IF NOT EXISTS raw.google_sheet_table_blocks (
     source_rows jsonb NOT NULL DEFAULT '[]'::jsonb,
     extracted_at timestamptz NOT NULL DEFAULT now()
 );
+
+COMMENT ON TABLE raw.google_sheet_table_blocks IS 'Raw table-block snapshots extracted from Google Sheets before normalization.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.block_id IS 'Surrogate primary key for each extracted table block.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.spreadsheet_id IS 'Google Spreadsheet identifier.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.worksheet_gid IS 'Google worksheet gid within the spreadsheet.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.worksheet_name IS 'Worksheet name when available.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.table_name IS 'Logical table name assigned to the extracted range.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.cell_range IS 'A1 notation range used for extraction.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.channel IS 'Normalized marketing channel inferred for the table block.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.header_row_index IS 'Zero-based header row offset inside the extracted range.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.source_columns IS 'Original column names captured from the source block.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.source_rows IS 'Original row values captured from the source block.';
+COMMENT ON COLUMN raw.google_sheet_table_blocks.extracted_at IS 'Timestamp when the source block was extracted.';
 
 CREATE INDEX IF NOT EXISTS google_sheet_table_blocks_sheet_idx
     ON raw.google_sheet_table_blocks (spreadsheet_id, worksheet_gid, table_name);
@@ -39,6 +56,24 @@ CREATE TABLE IF NOT EXISTS dw.meta_ads_daily (
     extracted_at timestamptz NOT NULL DEFAULT now(),
     loaded_at timestamptz NOT NULL DEFAULT now()
 );
+
+COMMENT ON TABLE dw.meta_ads_daily IS 'Normalized daily advertising performance fact table used for structured analytics QA.';
+COMMENT ON COLUMN dw.meta_ads_daily.performance_id IS 'Surrogate primary key for each normalized performance row.';
+COMMENT ON COLUMN dw.meta_ads_daily.spreadsheet_id IS 'Source Google Spreadsheet identifier.';
+COMMENT ON COLUMN dw.meta_ads_daily.worksheet_gid IS 'Source worksheet gid within the spreadsheet.';
+COMMENT ON COLUMN dw.meta_ads_daily.source_table_name IS 'Logical source table name derived from the sheet block.';
+COMMENT ON COLUMN dw.meta_ads_daily.source_range IS 'Source A1 range used to build the performance row.';
+COMMENT ON COLUMN dw.meta_ads_daily.channel IS 'Canonical marketing channel value.';
+COMMENT ON COLUMN dw.meta_ads_daily.event_date IS 'Performance date represented by the row.';
+COMMENT ON COLUMN dw.meta_ads_daily.product_name IS 'Product or SKU name from the source sheet.';
+COMMENT ON COLUMN dw.meta_ads_daily.campaign_name IS 'Campaign name from the source sheet.';
+COMMENT ON COLUMN dw.meta_ads_daily.campaign_mapping IS 'Optional normalized campaign mapping value.';
+COMMENT ON COLUMN dw.meta_ads_daily.budget IS 'Configured campaign budget amount.';
+COMMENT ON COLUMN dw.meta_ads_daily.spend IS 'Advertising spend amount.';
+COMMENT ON COLUMN dw.meta_ads_daily.revenue IS 'Attributed revenue amount.';
+COMMENT ON COLUMN dw.meta_ads_daily.roas IS 'Return on ad spend metric.';
+COMMENT ON COLUMN dw.meta_ads_daily.extracted_at IS 'Timestamp when the source data was extracted.';
+COMMENT ON COLUMN dw.meta_ads_daily.loaded_at IS 'Timestamp when the normalized row was loaded into the warehouse.';
 
 ALTER TABLE dw.meta_ads_daily
     ALTER COLUMN campaign_mapping SET DEFAULT '';
@@ -151,6 +186,14 @@ CREATE TABLE IF NOT EXISTS docs.notion_pages (
     indexed_at timestamptz NOT NULL DEFAULT now()
 );
 
+COMMENT ON TABLE docs.notion_pages IS 'Indexed Notion page metadata and flattened markdown-like page content.';
+COMMENT ON COLUMN docs.notion_pages.page_id IS 'Notion page identifier.';
+COMMENT ON COLUMN docs.notion_pages.title IS 'Notion page title.';
+COMMENT ON COLUMN docs.notion_pages.url IS 'Original Notion page URL.';
+COMMENT ON COLUMN docs.notion_pages.last_edited_time IS 'Last edited timestamp returned by Notion API.';
+COMMENT ON COLUMN docs.notion_pages.markdown_content IS 'Flattened page content converted from Notion blocks into markdown-like text.';
+COMMENT ON COLUMN docs.notion_pages.indexed_at IS 'Timestamp when the page was indexed into the local document store.';
+
 CREATE TABLE IF NOT EXISTS docs.document_chunks (
     chunk_id bigserial PRIMARY KEY,
     page_id text NOT NULL REFERENCES docs.notion_pages(page_id) ON DELETE CASCADE,
@@ -159,6 +202,14 @@ CREATE TABLE IF NOT EXISTS docs.document_chunks (
     embedding vector NOT NULL,
     indexed_at timestamptz NOT NULL DEFAULT now()
 );
+
+COMMENT ON TABLE docs.document_chunks IS 'Chunked Notion document segments with pgvector embeddings for semantic retrieval.';
+COMMENT ON COLUMN docs.document_chunks.chunk_id IS 'Surrogate primary key for each indexed chunk.';
+COMMENT ON COLUMN docs.document_chunks.page_id IS 'Parent Notion page identifier.';
+COMMENT ON COLUMN docs.document_chunks.chunk_order IS 'Chunk order within the parent page.';
+COMMENT ON COLUMN docs.document_chunks.chunk_text IS 'Chunk text stored for retrieval and answer generation.';
+COMMENT ON COLUMN docs.document_chunks.embedding IS 'pgvector embedding for semantic similarity search.';
+COMMENT ON COLUMN docs.document_chunks.indexed_at IS 'Timestamp when the chunk embedding was indexed.';
 
 CREATE INDEX IF NOT EXISTS document_chunks_page_id_idx
     ON docs.document_chunks (page_id);

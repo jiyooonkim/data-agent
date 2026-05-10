@@ -79,18 +79,42 @@ def _call_ollama_text(user_prompt: str) -> str:
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     settings = get_settings()
-    response = requests.post(
-        f"{settings.ollama_base_url}/api/embed",
-        headers={"Content-Type": "application/json"},
-        json={
-            "model": settings.ollama_embedding_model,
-            "input": texts,
-        },
-        timeout=180,
-    )
-    response.raise_for_status()
-    payload = response.json()
+    payload = None
+
+    for endpoint, request_json in [
+        (
+            "/api/embed",
+            {
+                "model": settings.ollama_embedding_model,
+                "input": texts,
+            },
+        ),
+        (
+            "/api/embeddings",
+            {
+                "model": settings.ollama_embedding_model,
+                "prompt": texts[0] if len(texts) == 1 else "\n\n".join(texts),
+            },
+        ),
+    ]:
+        response = requests.post(
+            f"{settings.ollama_base_url}{endpoint}",
+            headers={"Content-Type": "application/json"},
+            json=request_json,
+            timeout=180,
+        )
+        if response.status_code == 404:
+            continue
+        response.raise_for_status()
+        payload = response.json()
+        break
+
+    if payload is None:
+        raise ValueError("No supported Ollama embedding endpoint was available.")
+
     embeddings = payload.get("embeddings", [])
+    if not embeddings and "embedding" in payload:
+        embeddings = [payload["embedding"]]
     if len(embeddings) != len(texts):
         raise ValueError("Ollama embedding response count did not match input count.")
     logger.info(

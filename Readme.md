@@ -191,7 +191,7 @@ docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
 
 For semi-structured document ingestion and QA:
 
-- [`NOTION_VECTOR_SETUP.md`](/Users/jykim/Documents/private/data-agent/NOTION_VECTOR_SETUP.md:1)
+- [`docs/NOTION_VECTOR_SETUP.md`](/Users/jykim/Documents/private/data-agent/docs/NOTION_VECTOR_SETUP.md:1)
 
 ---
 
