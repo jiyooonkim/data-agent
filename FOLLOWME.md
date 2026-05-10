@@ -1,6 +1,6 @@
 ### 다음 순서를 참고하여 프로젝트를 수행해 보세요!!
 
-30명 안팎이 사용하는 사내 챗봇을 기준으로 하면, 처음부터 거대한 플랫폼으로 갈 필요는 없습니다. 대신 "반복 적재", "오류 추적", "같은 데이터를 여러 번 넣어도 안전함" 이 세 가지를 먼저 확보하는걸 우선으로 하였습니다.
+처음부터 거대한 플랫폼을 가기보다, "반복 적재", "오류 추적", "같은 데이터를 여러 번 넣어도 안전함" 이 세 가지를 중점으로 설계하였습니다.
 
 ## 1. 1차 목표 
 
@@ -21,7 +21,7 @@
 - 날짜별 성과 컬럼: `YYYY-MM-DD_지출금액`, `YYYY-MM-DD_매출액`, `YYYY-MM-DD_ROAS`
 - 제외 행 규칙: `총계`, `SUMMARY`
 
-여기서 규칙이 흔들리면 이후 챗봇 정확도가 계속 흔들립니다. 가장 먼저 해야 하는 일은 "시트 포맷 계약"을 문서화하는 것입니다.
+여기서 규칙이 흔들리면 이후 챗봇 정확도가 계속 흔들립니다. 가장 먼저 해야 하는 일은 "시트 포맷 계약"을 문서화하고 함께 데이터 규약을 만들어나가는 것 
 
 ## 3. 적재 구조는 raw -> mart
 
@@ -29,9 +29,9 @@
 2. `mart_ads_daily`
 
 이유:
-- 시트 원본이 바뀌었을 때 역추적이 쉽습니다.
-- 변환 로직 버그가 나도 raw 기준으로 다시 적재할 수 있습니다.
-- 담당자 100명 수준이면 "누가 어떤 값을 바꿨는지" 추적 요구가 금방 생깁니다.
+- 시트 원본이 바뀌었을 때 역추적 용아
+- 변환 로직 버그가 나도 raw 기준으로 재적재 가능
+- 담당자 100명 수준이면 "누가 어떤 값을 바꿨는지" 추적 요구 위함
 
 ## 4. 배치 실행 방식
 - 일배치 또는 1시간 1회 배치
@@ -48,7 +48,7 @@
 
 여기에 unique constraint를 두고 upsert 해야 합니다. 그래야 같은 날짜 데이터를 다시 읽어와도 중복이 안 생깁니다.
 
-## 6. 챗봇 실행 순서
+## 6. 내부 데이터 흐름도 
 
 1. 시트 읽기와 DB 적재 안정화
 2. 스케줄러 배치 적용
@@ -58,7 +58,7 @@
 6. LLM이 SQL 생성
 7. 챗봇 응답 검증 및 권한 통제
 
-이 순서를 생각한 이유는, 데이터 품질이 먼저 고정되지 않으면 챗봇 품질도 고정되지 않기 때문입니다.
+이 순서를 생각한 이유는, 데이터 품질 고정 -> 챗봇 응답 품질 영향 있기 떄문
 
 ## 7. 개발 환경 & 프로젝트 실행 방법 
 
@@ -103,13 +103,13 @@ cp .env.example .env
 - host: `localhost`
 - port: `5432`
 - database: `postgres`
-- user: `data_agent`
-- password: `data_agent`
+- user: `postgres`
+- password: `postgres`
 
 Python에서는 JDBC URL이 아니라 아래 형식을 사용합니다.
 
 ```text
-postgresql://data_agent:data_agent@localhost:5432/postgres
+postgresql://postgres:postgres@localhost:5432/postgres
 ```
 
 ```bash
@@ -125,22 +125,7 @@ result = run()
 print(result)
 ```
 
-## 8. 구글 시트 링크를 읽는 방식
-
-현재 링크:
-
-`https://docs.google.com/spreadsheets/d/1a1kgbwfJs1N_fwvxBcojHnKykvfBfeiRM7VJz4z00K0/edit?usp=sharing`
-
-이 링크는 현재 공개 export가 막혀 있어서 브라우저 없는 서버에서는 익명 CSV 다운로드가 되지 않습니다. 따라서 운영 방식은 아래가 맞습니다.
-
-1. Google Cloud 서비스 계정 생성
-2. `credentials.json` 발급
-3. 해당 서비스 계정 이메일을 시트 공유 대상에 추가
-4. 코드에서 `gspread.service_account(...).open_by_url(...)` 사용
-
-이 방식이 private sheet 운영에 가장 안정적입니다.
-
-## 9. Airflow 3.2.0 파이프라인
+## 8. Airflow 3.2.0 파이프라인
 
 이 저장소에는 Apache Airflow `3.2.0` 기준 Docker 구성이 포함되어 있습니다.
 
@@ -153,7 +138,7 @@ print(result)
 구성 내용:
 
 - `postgres`: DW 적재 대상 Postgres
-- `airflow-postgres`: Airflow 메타데이터 DB
+- `airflow-mysql`: Airflow 메타데이터 DB
 - `airflow-init`: Airflow DB 초기화 및 admin 계정 생성
 - `airflow-api-server`: Airflow UI/API
 - `airflow-scheduler`
@@ -185,7 +170,7 @@ DAG:
 
 ## 10. 자연어 질의 모델 실행 방식
 
-현재 프로젝트의 자연어 질의 기본 경로는 `Groq`가 아니라 `Ollama` 입니다.
+현재 프로젝트의 자연어 질의 기본 경로는 `Ollama` 입니다.
 
 - provider: `Ollama`
 - model: `qwen3:8b`

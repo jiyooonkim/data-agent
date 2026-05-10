@@ -6,7 +6,7 @@ import logging
 import requests
 
 from config.settings import get_settings
-from llm.prompt import SYSTEM_PROMPT, build_sql_prompt, build_sql_repair_prompt
+from llm.prompt import DOC_SYSTEM_PROMPT, SYSTEM_PROMPT, build_doc_answer_prompt, build_sql_prompt, build_sql_repair_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,10 @@ def _parse_sql_json(content: str, provider_name: str, model_name: str) -> str:
     return sql_text
 
 
+def _extract_ollama_text(payload: dict) -> str:
+    return payload.get("response") or payload.get("thinking") or ""
+
+
 def _call_ollama(user_prompt: str) -> str:
     settings = get_settings()
     response = requests.post(
@@ -45,53 +49,60 @@ def _call_ollama(user_prompt: str) -> str:
     response.raise_for_status()
 
     payload = response.json()
-    content = payload.get("response") or payload.get("thinking") or ""
+    content = _extract_ollama_text(payload)
     logger.info("Received SQL generation response from Ollama model %s.", settings.ollama_sql_model)
     return _parse_sql_json(content, "Ollama", settings.ollama_sql_model)
 
 
-def _call_groq(user_prompt: str) -> str:
+def _call_ollama_text(user_prompt: str) -> str:
     settings = get_settings()
-    if not settings.groq_api_key:
-        raise ValueError("GROQ_API_KEY is not configured.")
-
     response = requests.post(
-        f"{settings.groq_base_url}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {settings.groq_api_key}",
-            "Content-Type": "application/json",
-        },
+        f"{settings.ollama_base_url}/api/generate",
+        headers={"Content-Type": "application/json"},
         json={
-            "model": settings.groq_model,
-            "temperature": 0.1,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
+            "model": settings.ollama_doc_model,
+            "stream": False,
+            "options": {"temperature": 0.1},
+            "prompt": f"{DOC_SYSTEM_PROMPT}\n\n{user_prompt}",
         },
-        timeout=30,
+        timeout=180,
     )
     response.raise_for_status()
 
     payload = response.json()
-    content = payload["choices"][0]["message"]["content"]
-    logger.info("Received SQL generation response from Groq model %s.", settings.groq_model)
-    return _parse_sql_json(content, "Groq", settings.groq_model)
+    content = _extract_ollama_text(payload).strip()
+    if not content:
+        raise ValueError(f"Ollama response from {settings.ollama_doc_model} was empty.")
+    logger.info("Received document answer response from Ollama model %s.", settings.ollama_doc_model)
+    return content
 
 
-def _call_llm(user_prompt: str) -> str:
+def embed_texts(texts: list[str]) -> list[list[float]]:
     settings = get_settings()
-    if settings.llm_provider == "ollama":
-        return _call_ollama(user_prompt)
-    if settings.llm_provider == "groq":
-        return _call_groq(user_prompt)
-    raise ValueError(f"Unsupported LLM_PROVIDER: {settings.llm_provider}")
-
+    response = requests.post(
+        f"{settings.ollama_base_url}/api/embed",
+        headers={"Content-Type": "application/json"},
+        json={
+            "model": settings.ollama_embedding_model,
+            "input": texts,
+        },
+        timeout=180,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    embeddings = payload.get("embeddings", [])
+    if len(embeddings) != len(texts):
+        raise ValueError("Ollama embedding response count did not match input count.")
+    logger.info(
+        "Received %s embeddings from Ollama model %s.",
+        len(embeddings),
+        settings.ollama_embedding_model,
+    )
+    return embeddings
 
 def generate_sql(question: str) -> str:
     settings = get_settings()
-    return _call_llm(
+    return _call_ollama(
         build_sql_prompt(
             question=question,
             default_limit=settings.qa_default_limit,
@@ -101,7 +112,7 @@ def generate_sql(question: str) -> str:
 
 def repair_sql(question: str, sql_text: str, error_text: str) -> str:
     settings = get_settings()
-    return _call_llm(
+    return _call_ollama(
         build_sql_repair_prompt(
             question=question,
             sql_text=sql_text,
@@ -109,3 +120,7 @@ def repair_sql(question: str, sql_text: str, error_text: str) -> str:
             default_limit=settings.qa_default_limit,
         )
     )
+
+
+def generate_doc_answer(question: str, contexts: list[str]) -> str:
+    return _call_ollama_text(build_doc_answer_prompt(question, contexts))

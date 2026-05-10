@@ -31,7 +31,7 @@ Python ingestion (Apache Airflow 3.2.0)
     ↓
 Postgres (logical mart: mart_ads_daily / current table: dw.meta_ads_daily)
     ↓
-LLM (Groq 무료)
+LLM (Ollama local model)
     ↓
 SQL 생성
     ↓
@@ -79,11 +79,11 @@ PostgreSQL을 선택한 이유는 명확합니다.
   - Airflow/Python 연동이 단순함
   - Slack 챗봇의 조회 소스로 바로 쓰기 좋음
 
-### Groq
+### Ollama
 
-- 현재 SQL 생성 모델은 Groq를 사용합니다.
-- 이유는 초기 단계에서 비용을 낮게 유지하면서 빠른 응답을 확보하기 위해서입니다.
-- 현재는 OpenAI-compatible API 방식으로 붙어 있어 구조상 provider 교체도 어렵지 않습니다.
+- 현재 정형 데이터 SQL 생성 모델은 `Ollama qwen3:8b`를 사용합니다.
+- 이유는 무료로 사용할 수 있고, 사내 데이터가 외부 API로 나가지 않게 하기 위해서입니다.
+- 현재 구조는 `질문 -> Ollama -> SQL -> PostgreSQL 조회` 경로입니다.
 
 ### Slack or CLI
 
@@ -112,7 +112,7 @@ PostgreSQL을 선택한 이유는 명확합니다.
 ### 질의응답
 
 - 자연어 질문 입력
-- Groq로 SQL 생성
+- Ollama로 SQL 생성
 - SQL 안전성 검증
 - PostgreSQL 조회
 - 결과를 Slack / CLI에 응답
@@ -161,7 +161,7 @@ PostgreSQL을 선택한 이유는 명확합니다.
 ```text
 사용자 질문
 -> question normalize
--> Groq 호출
+-> Ollama 호출
 -> SQL 생성
 -> SQL validation
 -> PostgreSQL 실행
@@ -225,8 +225,7 @@ PostgreSQL을 선택한 이유는 명확합니다.
 ```env
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_APP_TOKEN=xapp-...
-GROQ_API_KEY=...
-DATABASE_URL=postgresql://data_agent:data_agent@localhost:5432/postgres
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
 ```
 
 ### 8.2 `SLACK_BOT_TOKEN`
@@ -352,8 +351,7 @@ docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
 실데이터가 적으면 QA 테스트가 어렵기 때문에 seed 경로도 추가해두었습니다.
 
 ```bash
-env DATABASE_URL=postgresql://data_agent:data_agent@localhost:5432/postgres \
-DATABASE_ADMIN_URL=postgresql://postgres:postgres@localhost:5432/postgres \
+env DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres \
 ./.venv/bin/python main.py seed-demo-data
 ```
 
@@ -408,7 +406,7 @@ DATABASE_ADMIN_URL=postgresql://postgres:postgres@localhost:5432/postgres \
 사용자 질문
 -> 질문 분류
    -> 정형 데이터 질문
-      -> Groq
+      -> Ollama
       -> SQL 생성
       -> PostgreSQL 조회
    -> 문서/정책 질문
@@ -444,7 +442,7 @@ DATABASE_ADMIN_URL=postgresql://postgres:postgres@localhost:5432/postgres \
 
 ### 모델 분리 방향
 
-- 정형 데이터 질문 -> `Groq`
+- 정형 데이터 질문 -> `Ollama`
 - 문서/정책 질문 -> `Gemini`
 
 즉, 한 모델로 모든 문제를 해결하기보다 질문 의도에 맞게 모델 역할을 나누는 방향입니다.
@@ -482,7 +480,7 @@ service/
 llm/
   llm_client.py
   prompt.py
-  groq_client.py
+  ollama_client.py
   gemini_client.py
 
 rag/
@@ -496,7 +494,7 @@ rag/
 - `router_service.py`
   - 질문 의도를 `sql`, `doc`, `hybrid`로 분류
 - `sql_qa_service.py`
-  - Groq + PostgreSQL
+  - Ollama + PostgreSQL
 - `doc_qa_service.py`
   - Gemini + Vector DB
 - `qa_service.py`
@@ -518,6 +516,6 @@ rag/
 2. Slack 운영 보강
 3. 문서/정책 질문 경로 추가
 4. Vector DB 도입
-5. Groq + Gemini 멀티 모델 분리
+5. Ollama + Gemini 멀티 모델 분리
 
 즉 지금은 `정형 데이터 챗봇의 기반`을 만든 단계이고, 이후에는 `문서형 RAG 챗봇`까지 통합하는 방향으로 확장예정

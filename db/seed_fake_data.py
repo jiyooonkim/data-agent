@@ -16,10 +16,10 @@ SEED_SQL_PATH = ROOT_DIR / "sql" / "seed_demo_meta_ads_daily.sql"
 
 def seed_demo_data() -> dict:
     logger.info("Ensuring DW tables exist.")
-    execute_sql_file(str(DDL_SQL_PATH), admin=True)
+    execute_sql_file(str(DDL_SQL_PATH))
 
     logger.info("Seeding demo data into PostgreSQL.")
-    execute_sql_file(str(SEED_SQL_PATH), admin=False)
+    execute_sql_file(str(SEED_SQL_PATH))
 
     channel_counts = run_query(
         """

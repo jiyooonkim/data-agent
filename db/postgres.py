@@ -22,11 +22,10 @@ def adapt_value(value):
     return value
 
 
-def get_connection(admin: bool = False):
+def get_connection():
     settings = get_settings()
-    database_url = settings.database_admin_url if admin and settings.database_admin_url else settings.database_url
-    logger.info("Opening PostgreSQL connection%s.", " (admin)" if admin else "")
-    return psycopg2.connect(database_url)
+    logger.info("Opening PostgreSQL connection.")
+    return psycopg2.connect(settings.database_url)
 
 
 def resolve_table_name(table_name: str):
@@ -61,10 +60,10 @@ def execute(sql_text: str, params: Iterable | None = None):
         conn.commit()
 
 
-def execute_sql_file(file_path: str, admin: bool = True):
+def execute_sql_file(file_path: str):
     logger.info("Executing SQL file: %s", file_path)
     sql_text = Path(file_path).read_text(encoding="utf-8")
-    with get_connection(admin=admin) as conn:
+    with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(sql_text)
         conn.commit()
@@ -87,7 +86,7 @@ def ensure_table_exists(table_name: str, ddl_columns: list[str], primary_key_col
         sql.SQL(", ").join(sql.Identifier(column) for column in primary_key_columns),
     )
 
-    with get_connection(admin=True) as conn:
+    with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(create_schema_sql)
             cur.execute(create_table_sql)

@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Local startup helper for the structured-data QA path.
+# This script makes sure the local dependencies are ready:
+# 1) Docker Desktop
+# 2) docker compose services (PostgreSQL / Airflow)
+# 3) Ollama server
+# 4) qwen3:8b model for SQL generation
+
 echo "== DATA-AGENT LOCAL STARTUP =="
 echo ""
 echo "1) Checking Docker Desktop ..."

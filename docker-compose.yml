@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: data-agent-postgres
     restart: unless-stopped
     environment:
@@ -19,18 +19,19 @@ services:
       timeout: 5s
       retries: 5
 
-  airflow-postgres:
-    image: postgres:16
-    container_name: data-agent-airflow-postgres
+  airflow-mysql:
+    image: mysql:8.0
+    container_name: data-agent-airflow-mysql
     restart: unless-stopped
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: airflow
+      MYSQL_USER: airflow
+      MYSQL_PASSWORD: airflow
     volumes:
-      - airflow_postgres_data:/var/lib/postgresql/data
+      - airflow_mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u airflow -pairflow"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,7 +42,7 @@ services:
       dockerfile: Dockerfile.airflow
     container_name: data-agent-airflow-init
     depends_on:
-      airflow-postgres:
+      airflow-mysql:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -51,7 +52,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:-data-agent-airflow-jwt-secret-key-please-change-this-64-bytes-minimum}
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: mysql+mysqldb://airflow:airflow@airflow-mysql:3306/airflow?charset=utf8mb3
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"
@@ -59,8 +60,7 @@ services:
       AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
       AIRFLOW_UID: 50000
       PYTHONPATH: /opt/airflow/project
-      DATABASE_URL: postgresql://data_agent:data_agent@postgres:5432/postgres
-      DATABASE_ADMIN_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
       GOOGLE_CREDENTIALS_FILE: /opt/airflow/project/credentials.json
     volumes:
       - ./dags:/opt/airflow/dags
@@ -156,6 +156,6 @@ services:
 
 volumes:
   postgres_data:
-  airflow_postgres_data:
+  airflow_mysql_data:
   airflow_logs:
   airflow_plugins:

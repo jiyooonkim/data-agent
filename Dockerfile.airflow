@@ -3,4 +3,5 @@ FROM apache/airflow:3.2.0-python3.12
 COPY requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir "apache-airflow==3.2.0" \
+    && pip install --no-cache-dir "mysqlclient>=2.2.5" \
     && pip install --no-cache-dir "apache-airflow==3.2.0" -r /tmp/requirements.txt

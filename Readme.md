@@ -1,5 +1,5 @@
 
-# data-agent
+# Data-Agent
 
 A data pipeline and conversational analytics system that ingests Google Sheets-based ad performance data into PostgreSQL and enables natural language queries via Slack or CLI.
 
@@ -123,6 +123,23 @@ Slack / CLI response
   * query validation
   * retry with repair
 
+### Why Ollama + qwen3:8b for Structured Data
+
+For this project, the structured-data path uses `Ollama + qwen3:8b` for practical reasons:
+
+* `Groq` is an external LLM API service, so prompts and business questions are sent outside the local environment.
+* `Ollama` runs the model locally, so data stays inside the developer machine or internal server.
+* This project handles internal ad-performance data, so data exposure risk mattered more than raw speed.
+* `qwen3:8b` was chosen as the balance point:
+  * better SQL quality than very small local models like `4b`
+  * lighter and more realistic than larger local models like `14b`
+  * suitable for `natural language -> SQL` generation on structured analytics questions
+
+In short:
+
+* `Groq` = easier and often faster, but external transmission exists
+* `Ollama` = slower, but better for security-sensitive internal analytics
+
 ---
 
 ## Getting Started
@@ -169,6 +186,12 @@ docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
 * `llm/` – prompt + LLM client (Ollama default)
 * `slack_app.py` – Slack interface
 * `dags/` – Airflow DAGs
+
+## Notion + Vector Setup
+
+For semi-structured document ingestion and QA:
+
+- [`NOTION_VECTOR_SETUP.md`](/Users/jykim/Documents/private/data-agent/NOTION_VECTOR_SETUP.md:1)
 
 ---
 

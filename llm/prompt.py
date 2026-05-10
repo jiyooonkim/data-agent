@@ -46,6 +46,16 @@ Rules:
 - Use Korean calendar/date wording as natural-language input only; output SQL only.
 """
 
+DOC_SYSTEM_PROMPT = """You answer questions using retrieved internal document context.
+
+Rules:
+- Use only the provided context.
+- If the answer is not in the context, say you could not find it in the indexed Notion content.
+- Be concise and factual.
+- Do not invent policies, procedures, dates, or owners.
+- Prefer bullet points when summarizing multiple items.
+"""
+
 
 def build_sql_prompt(question: str, default_limit: int) -> str:
     return f"""User question:
@@ -72,4 +82,16 @@ Default row limit:
 {default_limit}
 
 Fix the SQL and return JSON with a single key named sql.
+"""
+
+
+def build_doc_answer_prompt(question: str, contexts: list[str]) -> str:
+    joined_context = "\n\n---\n\n".join(contexts)
+    return f"""User question:
+{question}
+
+Retrieved internal document context:
+{joined_context}
+
+Answer using only the context above.
 """

@@ -1,4 +1,4 @@
-# data-agent
+# Data-Agent
 
 Google Sheet 기반 광고 데이터를 PostgreSQL DW에 적재하고, Slack/CLI에서 자연어 질의를 SQL로 변환해 답변하는 프로젝트입니다. 현재 배치 적재는 Airflow 3.2.0 기준입니다.
 
@@ -18,7 +18,7 @@ Python ingestion (Apache Airflow 3.2.0)
     ↓
 Postgres (logical mart: mart_ads_daily / current table: dw.meta_ads_daily)
     ↓
-LLM (Groq free tier)
+LLM (Ollama local model)
     ↓
 SQL 생성
     ↓
@@ -46,10 +46,31 @@ Slack or CLI 응답
 ## SQL 생성 방식
 
 - 현재 대상 테이블은 `dw.meta_ads_daily`로 제한합니다.
+- 정형 데이터 SQL 생성 모델은 `Ollama qwen3:8b`를 사용합니다.
 - LLM은 `SELECT` 쿼리만 생성합니다.
 - 애플리케이션에서 한 번 더 금지 키워드와 대상 테이블을 검증합니다.
 - DB 에러가 나면 한 번 더 SQL repair를 시도합니다.
 - 채널명은 `google`, `facebook` canonical 값으로 정규화합니다.
+
+## 왜 정형 데이터는 Ollama + qwen3:8b 인가
+
+이 프로젝트의 정형 데이터 경로는 `Ollama + qwen3:8b`를 사용합니다.
+
+이유는 아래와 같습니다.
+
+- `Groq`는 외부 LLM API 서비스이기 때문에 질문과 데이터 맥락이 외부로 전송됩니다.
+- `Ollama`는 로컬에서 모델을 실행하므로 데이터가 로컬 또는 내부 서버 안에 머뭅니다.
+- 이 프로젝트는 사내 광고 성과 데이터를 다루기 때문에 속도보다 데이터 보안이 더 중요했습니다.
+- `qwen3:8b`는 현재 로컬 모델 중에서 정형 데이터 SQL 생성 용도로 균형이 좋습니다.
+  - `4b`보다 SQL 품질이 더 안정적이고
+  - `14b`보다 로컬 실행 부담이 작으며
+  - 자연어 -> SQL 변환 용도에 현실적인 선택입니다
+
+정리:
+
+- `Groq` = 빠르고 편하지만 외부 전송 있음
+- `Ollama` = 느릴 수 있지만 보안상 유리함
+- 그래서 정형 데이터 SQL 생성은 `Ollama + qwen3:8b`로 고정했습니다.
 
 ## 빠른 시작
 
@@ -62,7 +83,7 @@ cp .env.example .env
 2. 인프라 실행
 
 ```bash
-docker compose up -d --build
+./scripts/start_local_services.sh
 ```
 
 3. 적재 DAG 실행
@@ -77,22 +98,3 @@ docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
 ```bash
 ./.venv/bin/python slack_app.py
 ```
-
-## 주요 파일
-
-- [`ingestion/sheet_to_postgres.py`](/Users/jykim/Documents/private/data-agent/ingestion/sheet_to_postgres.py:1)
-- [`ingestion/google_sheets.py`](/Users/jykim/Documents/private/data-agent/ingestion/google_sheets.py:1)
-- [`db/postgres.py`](/Users/jykim/Documents/private/data-agent/db/postgres.py:1)
-- [`service/qa_service.py`](/Users/jykim/Documents/private/data-agent/service/qa_service.py:1)
-- [`llm/llm_client.py`](/Users/jykim/Documents/private/data-agent/llm/llm_client.py:1)
-- [`llm/prompt.py`](/Users/jykim/Documents/private/data-agent/llm/prompt.py:1)
-- [`slack_app.py`](/Users/jykim/Documents/private/data-agent/slack_app.py:1)
-- [`dags/sheet_to_postgres_dag.py`](/Users/jykim/Documents/private/data-agent/dags/sheet_to_postgres_dag.py:1)
-
-## 팀 공유 문서
-
-상세 설명은 [`TEAM_SHARE.md`](/Users/jykim/Documents/private/data-agent/TEAM_SHARE.md:1) 를 봐야 합니다.
-
-## 참고
-
-- 기존 문서는 [`README.legacy.md`](/Users/jykim/Documents/private/data-agent/README.legacy.md:1) 로 보존했습니다.

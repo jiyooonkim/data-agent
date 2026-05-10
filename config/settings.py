@@ -12,20 +12,21 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     database_url: str
-    database_admin_url: str | None
     slack_bot_token: str | None
     slack_app_token: str | None
     slack_max_reply_chars: int
-    llm_provider: str
     ollama_base_url: str
     ollama_sql_model: str
-    groq_api_key: str | None
-    groq_model: str
-    groq_base_url: str
+    ollama_doc_model: str
+    ollama_embedding_model: str
     qa_default_limit: int
+    doc_answer_chunk_limit: int
     openai_api_key: str | None
     openai_model: str
     openai_base_url: str | None
+    notion_access_token: str | None
+    notion_version: str
+    notion_page_ids: list[str]
     google_credentials_file: str
     google_sheet_url: str
     google_worksheet_name: str
@@ -37,22 +38,23 @@ def get_settings() -> Settings:
     return Settings(
         database_url=os.getenv(
             "DATABASE_URL",
-            "postgresql://data_agent:data_agent@localhost:5432/postgres",
+            "postgresql://postgres:postgres@localhost:5432/postgres",
         ),
-        database_admin_url=os.getenv("DATABASE_ADMIN_URL"),
         slack_bot_token=os.getenv("SLACK_BOT_TOKEN"),
         slack_app_token=os.getenv("SLACK_APP_TOKEN"),
         slack_max_reply_chars=int(os.getenv("SLACK_MAX_REPLY_CHARS", "3000")),
-        llm_provider=os.getenv("LLM_PROVIDER", "ollama"),
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         ollama_sql_model=os.getenv("OLLAMA_SQL_MODEL", "qwen3:8b"),
-        groq_api_key=os.getenv("GROQ_API_KEY"),
-        groq_model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
-        groq_base_url=os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+        ollama_doc_model=os.getenv("OLLAMA_DOC_MODEL", "qwen3:8b"),
+        ollama_embedding_model=os.getenv("OLLAMA_EMBEDDING_MODEL", "embeddinggemma"),
         qa_default_limit=int(os.getenv("QA_DEFAULT_LIMIT", "200")),
+        doc_answer_chunk_limit=int(os.getenv("DOC_ANSWER_CHUNK_LIMIT", "5")),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         openai_base_url=os.getenv("OPENAI_BASE_URL"),
+        notion_access_token=os.getenv("NOTION_ACCESS_TOKEN"),
+        notion_version=os.getenv("NOTION_VERSION", "2026-03-11"),
+        notion_page_ids=[page_id.strip() for page_id in os.getenv("NOTION_PAGE_IDS", "").split(",") if page_id.strip()],
         google_credentials_file=os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json"),
         google_sheet_url=os.getenv(
             "GOOGLE_SHEET_URL",

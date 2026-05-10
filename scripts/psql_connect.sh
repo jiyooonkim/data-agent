@@ -4,12 +4,7 @@ set -euo pipefail
 
 CONTAINER_NAME="data-agent-postgres"
 DB_NAME="postgres"
-DB_USER="data_agent"
-
-if [[ "${1:-}" == "--admin" ]]; then
-  DB_USER="postgres"
-  shift
-fi
+DB_USER="postgres"
 
 if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
   echo "Postgres container is not running: $CONTAINER_NAME" >&2

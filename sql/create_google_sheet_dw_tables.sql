@@ -1,10 +1,8 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE SCHEMA IF NOT EXISTS raw;
 CREATE SCHEMA IF NOT EXISTS dw;
-
-GRANT USAGE ON SCHEMA raw TO data_agent;
-GRANT USAGE ON SCHEMA dw TO data_agent;
-GRANT SELECT ON ALL TABLES IN SCHEMA raw TO data_agent;
-GRANT SELECT ON ALL TABLES IN SCHEMA dw TO data_agent;
+CREATE SCHEMA IF NOT EXISTS docs;
 
 CREATE TABLE IF NOT EXISTS raw.google_sheet_table_blocks (
     block_id bigserial PRIMARY KEY,
@@ -22,8 +20,6 @@ CREATE TABLE IF NOT EXISTS raw.google_sheet_table_blocks (
 
 CREATE INDEX IF NOT EXISTS google_sheet_table_blocks_sheet_idx
     ON raw.google_sheet_table_blocks (spreadsheet_id, worksheet_gid, table_name);
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE raw.google_sheet_table_blocks TO data_agent;
 
 CREATE TABLE IF NOT EXISTS dw.meta_ads_daily (
     performance_id bigserial PRIMARY KEY,
@@ -146,12 +142,23 @@ CREATE INDEX IF NOT EXISTS meta_ads_daily_product_idx
 CREATE INDEX IF NOT EXISTS meta_ads_daily_campaign_idx
     ON dw.meta_ads_daily (campaign_name);
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE dw.meta_ads_daily TO data_agent;
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA raw TO data_agent;
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA dw TO data_agent;
-ALTER DEFAULT PRIVILEGES IN SCHEMA raw GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO data_agent;
-ALTER DEFAULT PRIVILEGES IN SCHEMA dw GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO data_agent;
-ALTER DEFAULT PRIVILEGES IN SCHEMA raw GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO data_agent;
-ALTER DEFAULT PRIVILEGES IN SCHEMA dw GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO data_agent;
-GRANT USAGE, SELECT, UPDATE ON SEQUENCE raw.google_sheet_table_blocks_block_id_seq TO data_agent;
-GRANT USAGE, SELECT, UPDATE ON SEQUENCE dw.meta_ads_daily_performance_id_seq TO data_agent;
+CREATE TABLE IF NOT EXISTS docs.notion_pages (
+    page_id text PRIMARY KEY,
+    title text NOT NULL,
+    url text NOT NULL,
+    last_edited_time text,
+    markdown_content text NOT NULL,
+    indexed_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS docs.document_chunks (
+    chunk_id bigserial PRIMARY KEY,
+    page_id text NOT NULL REFERENCES docs.notion_pages(page_id) ON DELETE CASCADE,
+    chunk_order integer NOT NULL,
+    chunk_text text NOT NULL,
+    embedding vector NOT NULL,
+    indexed_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS document_chunks_page_id_idx
+    ON docs.document_chunks (page_id);
