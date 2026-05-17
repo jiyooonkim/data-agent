@@ -111,6 +111,7 @@ Notes:
   - normal page IDs
   - database IDs
   - data source IDs
+- when a parent page ID is provided, child pages under that page are indexed recursively
 
 ---
 
@@ -165,6 +166,7 @@ docker compose up -d --build
 - calls Notion API
 - fetches page metadata
 - fetches block children recursively
+- recursively follows `child_page` blocks when a parent page ID is ingested
 - falls back to database/data source APIs when page retrieval returns 404
 - converts page content and row properties into markdown-like plain text
 

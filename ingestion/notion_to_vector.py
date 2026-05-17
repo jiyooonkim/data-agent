@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 import logging
 from pathlib import Path
 
@@ -13,7 +14,11 @@ from llm.llm_client import embed_texts
 
 logger = logging.getLogger(__name__)
 
-DDL_SQL_PATH = Path(__file__).resolve().parent.parent / "sql" / "create_google_sheet_dw_tables.sql"
+SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
+DDL_SQL_PATH = SQL_DIR / "create_google_sheet_dw_tables.sql"
+UPSERT_NOTION_PAGE_SQL_PATH = SQL_DIR / "upsert_notion_page.sql"
+DELETE_NOTION_DOCUMENT_CHUNKS_SQL_PATH = SQL_DIR / "delete_notion_document_chunks.sql"
+INSERT_NOTION_DOCUMENT_CHUNKS_SQL_PATH = SQL_DIR / "insert_notion_document_chunks.sql"
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 200
 
@@ -63,29 +68,16 @@ def to_vector_literal(embedding: list[float]) -> str:
     return "[" + ",".join(f"{value:.12f}" for value in embedding) + "]"
 
 
-def upsert_notion_page(document: NotionPageDocument) -> None:
-    query = """
-        INSERT INTO docs.notion_pages (
-            page_id,
-            title,
-            url,
-            last_edited_time,
-            markdown_content,
-            indexed_at
-        )
-        VALUES (%s, %s, %s, %s, %s, now())
-        ON CONFLICT (page_id) DO UPDATE
-        SET title = EXCLUDED.title,
-            url = EXCLUDED.url,
-            last_edited_time = EXCLUDED.last_edited_time,
-            markdown_content = EXCLUDED.markdown_content,
-            indexed_at = now()
-    """
+@lru_cache(maxsize=None)
+def load_sql(sql_path: Path) -> str:
+    return sql_path.read_text(encoding="utf-8")
 
+
+def upsert_notion_page(document: NotionPageDocument) -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                query,
+                load_sql(UPSERT_NOTION_PAGE_SQL_PATH),
                 (
                     document.page_id,
                     document.title,
@@ -100,7 +92,7 @@ def upsert_notion_page(document: NotionPageDocument) -> None:
 def replace_document_chunks(page_id: str, chunks: list[str], embeddings: list[list[float]]) -> int:
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM docs.document_chunks WHERE page_id = %s", (page_id,))
+            cur.execute(load_sql(DELETE_NOTION_DOCUMENT_CHUNKS_SQL_PATH), (page_id,))
             if chunks:
                 values = [
                     (
@@ -113,16 +105,7 @@ def replace_document_chunks(page_id: str, chunks: list[str], embeddings: list[li
                 ]
                 execute_values(
                     cur,
-                    """
-                    INSERT INTO docs.document_chunks (
-                        page_id,
-                        chunk_order,
-                        chunk_text,
-                        embedding,
-                        indexed_at
-                    )
-                    VALUES %s
-                    """,
+                    load_sql(INSERT_NOTION_DOCUMENT_CHUNKS_SQL_PATH),
                     values,
                     template="(%s, %s, %s, %s::vector, now())",
                     page_size=200,

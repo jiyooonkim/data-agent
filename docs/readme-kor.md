@@ -34,6 +34,7 @@ Slack or CLI 응답
 3. 정규화된 성과 데이터는 `dw.meta_ads_daily`에 upsert 합니다.
 4. `service/qa_service.py`가 자연어 질문을 받아 SQL 생성, 검증, DB 조회까지 처리합니다.
 5. `slack_app.py`가 Slack DM / 채널 멘션을 받아 같은 QA 서비스를 호출합니다.
+6. Notion 문서는 API로 읽어 chunk와 embedding으로 변환한 뒤 `docs.notion_pages`, `docs.document_chunks`에 저장합니다.
 
 ## PostgreSQL을 선택한 이유
 
@@ -93,8 +94,92 @@ docker compose exec airflow-api-server airflow dags unpause sheet_to_postgres
 docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
 ```
 
-4. Slack 앱 실행
+4. 정형 데이터 질의 테스트
+
+```bash
+./.venv/bin/python main.py ask --question "최근 7일 채널별 매출 합계 보여줘"
+```
+
+5. Notion 문서 적재
+
+먼저 `.env`에 아래 값을 설정합니다.
+
+```env
+NOTION_ACCESS_TOKEN=secret_xxx
+NOTION_VERSION=2026-03-11
+NOTION_PAGE_IDS=page_or_database_id_1,page_or_database_id_2
+OLLAMA_DOC_MODEL=qwen3:8b
+OLLAMA_EMBEDDING_MODEL=embeddinggemma
+DOC_ANSWER_CHUNK_LIMIT=5
+```
+
+그 다음 적재를 실행합니다.
+
+```bash
+./.venv/bin/python main.py ingest-notion
+```
+
+이 명령은 다음 순서로 동작합니다.
+
+- `NOTION_PAGE_IDS`에 있는 대상 ID를 순회합니다.
+- Notion API에서 페이지 내용을 읽습니다.
+- 상위 페이지를 넣으면 그 아래 child page도 재귀적으로 함께 수집합니다.
+- 페이지가 아니면 database 또는 data source API로 fallback 합니다.
+- 문서를 chunk로 나눕니다.
+- Ollama 임베딩 모델로 벡터를 생성합니다.
+- PostgreSQL `docs.notion_pages`, `docs.document_chunks`에 저장합니다.
+
+6. Notion 문서 질의 테스트
+
+```bash
+./.venv/bin/python main.py ask-doc --question "예산 변경 정책이 뭐야?"
+```
+
+7. Slack 앱 실행
 
 ```bash
 ./.venv/bin/python slack_app.py
 ```
+
+## Notion 문서 적재와 질의
+
+이 프로젝트는 정형 데이터 SQL 질의 외에 Notion 기반 문서 질의 경로도 지원합니다.
+
+실행 흐름은 아래와 같습니다.
+
+```text
+Notion API
+    ↓
+main.py ingest-notion
+    ↓
+chunk + embedding
+    ↓
+PostgreSQL / pgvector
+    ↓
+main.py ask-doc
+```
+
+사전 조건:
+
+- Notion에서 Internal integration 생성
+- integration에 `Read content` 권한 부여
+- 읽을 페이지 또는 상위 페이지를 integration에 공유
+- 대상 ID를 `NOTION_PAGE_IDS`에 등록
+
+`NOTION_PAGE_IDS`에는 아래 중 하나를 넣을 수 있습니다.
+
+- page ID
+- database ID
+- data source ID
+
+상위 page ID를 넣으면 그 페이지 아래의 child page들도 재귀적으로 함께 적재합니다.
+
+대표 실행 명령:
+
+```bash
+./scripts/start_local_services.sh
+./.venv/bin/python main.py ingest-notion
+./.venv/bin/python main.py ask-doc --question "예산 변경 정책이 뭐야?"
+```
+
+상세 설정은 [docs/notion-vector-setup.md](/Users/jykim/Documents/private/data-agent/docs/notion-vector-setup.md:1)를 보면 됩니다.

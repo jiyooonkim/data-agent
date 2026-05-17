@@ -209,11 +209,28 @@ def collect_markdown_lines(blocks: list[dict], depth: int = 0) -> list[str]:
     return lines
 
 
-def build_page_document(page_payload: dict, include_blocks: bool = True) -> NotionPageDocument:
+def collect_child_page_ids(blocks: list[dict]) -> list[str]:
+    child_page_ids: list[str] = []
+
+    for block in blocks:
+        if block.get("type") == "child_page" and block.get("id"):
+            child_page_ids.append(block["id"])
+
+        if block.get("has_children"):
+            child_page_ids.extend(collect_child_page_ids(list_block_children(block["id"])))
+
+    return child_page_ids
+
+
+def build_page_document(
+    page_payload: dict,
+    include_blocks: bool = True,
+    blocks: list[dict] | None = None,
+) -> NotionPageDocument:
     page_id = page_payload["id"]
     properties_lines = build_properties_markdown(page_payload)
-    blocks = list_block_children(page_id) if include_blocks else []
-    markdown_lines = collect_markdown_lines(blocks)
+    resolved_blocks = blocks if blocks is not None else (list_block_children(page_id) if include_blocks else [])
+    markdown_lines = collect_markdown_lines(resolved_blocks)
     combined_lines = []
 
     if properties_lines:
@@ -240,6 +257,27 @@ def fetch_notion_page_document(page_id: str) -> NotionPageDocument:
     logger.info("Fetching Notion page: %s", page_id)
     page_payload = notion_get(f"/pages/{page_id}")
     return build_page_document(page_payload, include_blocks=True)
+
+
+def fetch_notion_page_documents(
+    page_id: str,
+    visited_page_ids: set[str] | None = None,
+) -> list[NotionPageDocument]:
+    visited = visited_page_ids if visited_page_ids is not None else set()
+    if page_id in visited:
+        return []
+
+    logger.info("Fetching Notion page recursively: %s", page_id)
+    visited.add(page_id)
+
+    page_payload = notion_get(f"/pages/{page_id}")
+    blocks = list_block_children(page_id)
+    documents = [build_page_document(page_payload, include_blocks=True, blocks=blocks)]
+
+    for child_page_id in collect_child_page_ids(blocks):
+        documents.extend(fetch_notion_page_documents(child_page_id, visited))
+
+    return documents
 
 
 def query_data_source_pages(data_source_id: str) -> list[dict]:
@@ -288,7 +326,7 @@ def fetch_notion_database_documents(target_id: str) -> list[NotionPageDocument]:
 
 def fetch_notion_documents(target_id: str) -> list[NotionPageDocument]:
     try:
-        return [fetch_notion_page_document(target_id)]
+        return fetch_notion_page_documents(target_id)
     except requests.HTTPError as exc:
         if exc.response is None or exc.response.status_code != 404:
             raise

@@ -39,7 +39,42 @@ docker compose exec airflow-api-server airflow dags trigger sheet_to_postgres
 ./.venv/bin/python main.py ask --question "최근 7일 채널별 매출 합계 보여줘"
 ```
 
-### 5. Run Slack app
+### 5. Ingest Notion documents
+
+Set these values in `.env` first:
+
+```env
+NOTION_ACCESS_TOKEN=secret_xxx
+NOTION_VERSION=2026-03-11
+NOTION_PAGE_IDS=page_or_database_id_1,page_or_database_id_2
+OLLAMA_DOC_MODEL=qwen3:8b
+OLLAMA_EMBEDDING_MODEL=embeddinggemma
+DOC_ANSWER_CHUNK_LIMIT=5
+```
+
+Then run:
+
+```bash
+./.venv/bin/python main.py ingest-notion
+```
+
+This command:
+
+- reads each target in `NOTION_PAGE_IDS`
+- fetches page content from the Notion API
+- recursively follows child pages when the target is a parent page
+- falls back to database or data source queries when needed
+- chunks the content
+- generates embeddings through Ollama
+- stores page metadata and vectors in PostgreSQL (`docs.notion_pages`, `docs.document_chunks`)
+
+After ingestion, test the document QA path:
+
+```bash
+./.venv/bin/python main.py ask-doc --question "예산 변경 정책이 뭐야?"
+```
+
+### 6. Run Slack app
 
 ```bash
 ./.venv/bin/python slack_app.py
@@ -197,7 +232,45 @@ In short:
 
 ## Notion + Vector Setup
 
-For semi-structured document ingestion and QA:
+For semi-structured document ingestion and QA, the main runtime path is:
+
+```text
+Notion API
+    ↓
+main.py ingest-notion
+    ↓
+chunk + embedding
+    ↓
+PostgreSQL / pgvector
+    ↓
+main.py ask-doc
+```
+
+Before running it, create a Notion internal integration, enable read access, and share the target page or database with that integration.
+
+The target IDs go into:
+
+```env
+NOTION_PAGE_IDS=page_or_database_id_1,page_or_database_id_2
+```
+
+You can use:
+
+- page IDs
+- database IDs
+- data source IDs
+
+If you register a parent page ID, the ingestion path now follows child pages under that page recursively and indexes them together.
+
+Main commands:
+
+```bash
+./scripts/start_local_services.sh
+./.venv/bin/python main.py ingest-notion
+./.venv/bin/python main.py ask-doc --question "예산 변경 정책이 뭐야?"
+```
+
+Detailed setup and examples:
 
 - [`docs/notion-vector-setup.md`](/Users/jykim/Documents/private/data-agent/docs/notion-vector-setup.md:1)
 
